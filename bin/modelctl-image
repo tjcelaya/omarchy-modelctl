@@ -4,6 +4,22 @@
 # reliably got keyboard focus.
 set -uo pipefail
 SD="${MODELCTL_SD_DIR:-/mnt/data/stable-diffusion-models}"
+
+# Model choice. SD-Turbo is the default: 4 steps, ~9s, cfg must be 1.0.
+# SD 1.5 is slower (20 steps) but takes real guidance, so prompts steer harder.
+#   modelctl-image --sd15 "a prompt"     or   MODELCTL_SD_MODEL=sd15
+MODEL="${MODELCTL_SD_MODEL:-turbo}"
+case "${1:-}" in
+  --sd15|--sd)    MODEL=sd15;  shift ;;
+  --turbo)        MODEL=turbo; shift ;;
+esac
+case "$MODEL" in
+  sd15) CKPT="$SD/v1-5-pruned-emaonly-fp16.safetensors"
+        DEF_STEPS=20; DEF_CFG=7.0 ;;
+  *)    CKPT="$SD/sd_turbo.safetensors"
+        DEF_STEPS=4;  DEF_CFG=1.0 ;;   # Turbo is distilled; guidance above 1 degrades it
+esac
+[ -f "$CKPT" ] || { notify-send -a modelctl -u critical "Missing checkpoint" "$CKPT"; exit 1; }
 # Where images land. Override per-invocation, or set MODELCTL_IMAGE_DIR in the
 # environment / the plugin's imageDir setting for a permanent change.
 OUT="${MODELCTL_IMAGE_DIR:-$HOME/Pictures/generated}"
@@ -17,11 +33,12 @@ prompt="$(printf '%s' "$prompt" | tr -d '\r\n')"
 [ -z "$prompt" ] && exit 0
 
 slug=$(printf '%s' "$prompt" | tr -cs '[:alnum:]' '-' | cut -c1-40 | sed 's/^-//;s/-$//')
-f="$OUT/$(date +%Y%m%d-%H%M%S)-${slug:-image}.png"
+f="$OUT/$(date +%Y%m%d-%H%M%S)-${MODEL}-${slug:-image}.png"
 
-notify-send -a modelctl -i image "Generating image…" "$prompt"
-if sd-cli -m "$SD/sd_turbo.safetensors" --type f16 -p "$prompt" \
-     --steps "${SD_STEPS:-4}" --cfg-scale 1.0 -W "${SD_W:-512}" -H "${SD_H:-512}" \
+notify-send -a modelctl -i image "Generating ($MODEL)…" "$prompt"
+if sd-cli -m "$CKPT" --type f16 -p "$prompt" \
+     --steps "${SD_STEPS:-$DEF_STEPS}" --cfg-scale "${SD_CFG:-$DEF_CFG}" \
+     -W "${SD_W:-512}" -H "${SD_H:-512}" \
      -o "$f" >/tmp/modelctl-image.log 2>&1 && [ -s "$f" ]; then
   notify-send -a modelctl -i "$f" "Image ready" "$(basename "$f")"
   uwsm-app -- imv "$f" >/dev/null 2>&1 || xdg-open "$f" >/dev/null 2>&1 &

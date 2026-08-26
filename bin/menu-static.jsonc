@@ -46,9 +46,15 @@
   },
   "modelctl.generate": {
     "icon": "󰋩",
-    "label": "Generate image…",
-    "description": "One-shot SD-Turbo · ~9s · does not hold the pool",
-    "action": "~/.config/omarchy/bar/scripts/modelctl-image"
+    "label": "Generate image (Turbo)…",
+    "description": "4 steps · ~9s · fast drafts",
+    "action": "~/.config/omarchy/bar/scripts/modelctl-image --turbo"
+  },
+  "modelctl.generate15": {
+    "icon": "󰋩",
+    "label": "Generate image (SD 1.5)…",
+    "description": "20 steps · slower · responds to guidance, steers harder",
+    "action": "~/.config/omarchy/bar/scripts/modelctl-image --sd15"
   },
   "modelctl.sep": {
     "icon": "",
