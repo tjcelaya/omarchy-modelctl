@@ -2,6 +2,6 @@
 # Open the model menu, guaranteeing its agent rows match herdr at the moment of
 # opening. The 5s bar poll keeps the badge live; this closes the gap for the menu.
 set -u
-D="$HOME/src/local-ai-kit/bar-scripts"
+D="$HOME/src/omarchy-modelctl/bin"
 "$D/modelctl-menu-sync" --force >/dev/null 2>&1
 exec omarchy menu summon modelctl

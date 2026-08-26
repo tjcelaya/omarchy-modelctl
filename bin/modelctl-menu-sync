@@ -4,7 +4,7 @@
 # so dynamic rows must be written into the JSONC.
 set -u
 FORCE=0; [ "${1:-}" = "--force" ] && FORCE=1
-D="$HOME/src/local-ai-kit/bar-scripts"
+D="$HOME/src/omarchy-modelctl/bin"
 EXT="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 STATIC="$D/menu-static.jsonc"
 STAMP="${XDG_RUNTIME_DIR:-/tmp}/modelctl-agents.stamp"
@@ -20,6 +20,28 @@ import sys,json
 static,out,rowfile=sys.argv[1],sys.argv[2],sys.argv[3]
 rows=[l.split("\t") for l in open(rowfile).read().splitlines() if l.strip()]
 s=open(static).read()
+
+# ── image section (own section; separator below is the static modelctl.sep) ──
+import os
+ST=os.path.expanduser("~/.local/state/modelctl")
+sel=(open(ST+"/sd-model").read().strip() if os.path.exists(ST+"/sd-model") else "turbo")
+expanded=os.path.exists(ST+"/sd-expanded")
+SB="~/.config/omarchy/bar/scripts"
+img=['  "modelctl.imgsep": {"icon":"","label":"────────────────","description":"","action":"true"},',
+     '  "modelctl.sd": {"icon":"󰋩","label":"stable-diffusion","description":"Show model selection · bar 󰋩 generates with the selected one",'
+     f'"action":"{SB}/modelctl-sd toggle-expand",'
+     '"checked":"[ -e ~/.local/state/modelctl/sd-expanded ]"},']
+if expanded:
+    for mid,lab,desc in [("turbo","· Turbo","4 steps · ~9s · drafts"),
+                          ("sd15","· SD 1.5","20 steps · ~32s · steers harder")]:
+        img.append(f'  "modelctl.sd{mid}": {{"icon":"","label":{json.dumps(lab)},'
+                   f'"description":{json.dumps(desc)},'
+                   f'"action":"{SB}/modelctl-sd select {mid}",'
+                   f'"checked":"[ \\"$(cat ~/.local/state/modelctl/sd-model 2>/dev/null)\\" = {mid} ]"}},')
+    img.append(f'  "modelctl.sdserver": {{"icon":"","label":"· Image server","description":"Resident sd-server on :8091",'
+               f'"action":"systemctl --user start modelctl@image.service",'
+               '"checked":"systemctl --user is-active --quiet modelctl@image.service"},')
+s=s.replace("// @IMAGE_SECTION@","\n".join(img))
 extra=[]
 if rows:
     extra.append('  "modelctl.agentsep": {"icon":"","label":"────────────────","description":"","action":"true"},')

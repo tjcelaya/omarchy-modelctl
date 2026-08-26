@@ -8,7 +8,8 @@ SD="${MODELCTL_SD_DIR:-/mnt/data/stable-diffusion-models}"
 # Model choice. SD-Turbo is the default: 4 steps, ~9s, cfg must be 1.0.
 # SD 1.5 is slower (20 steps) but takes real guidance, so prompts steer harder.
 #   modelctl-image --sd15 "a prompt"     or   MODELCTL_SD_MODEL=sd15
-MODEL="${MODELCTL_SD_MODEL:-turbo}"
+SEL=$(cat "$HOME/.local/state/modelctl/sd-model" 2>/dev/null || echo turbo)
+MODEL="${MODELCTL_SD_MODEL:-$SEL}"
 case "${1:-}" in
   --sd15|--sd)    MODEL=sd15;  shift ;;
   --turbo)        MODEL=turbo; shift ;;

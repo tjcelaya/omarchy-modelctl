@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# SD menu state: which model is selected, and whether the picker is expanded.
+# Usage: modelctl-sd select <turbo|sd15> | toggle-expand
+set -u
+ST="$HOME/.local/state/modelctl"; mkdir -p "$ST"
+case "${1:-}" in
+  select)
+    echo "${2:-turbo}" > "$ST/sd-model"
+    notify-send -a modelctl -i image "Image model" "Selected: ${2:-turbo}" ;;
+  toggle-expand)
+    if [ -e "$ST/sd-expanded" ]; then rm -f "$ST/sd-expanded"; else touch "$ST/sd-expanded"; fi ;;
+  *) echo "usage: modelctl-sd select <turbo|sd15> | toggle-expand" >&2; exit 1 ;;
+esac
+# Regenerate the menu so the change shows on next open
+"$HOME/src/omarchy-modelctl/bin/modelctl-menu-sync" --force >/dev/null 2>&1
