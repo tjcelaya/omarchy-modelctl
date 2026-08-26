@@ -62,12 +62,19 @@ case "${1:-default}" in
   fast)
     exec llama-server -m "$M4/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf" \
       -c 32768 -a qwen3-4b "${COMMON[@]}" "${@:2}" ;;
+  image)
+    # SD-Turbo resident on 8091. Measured: +4.5 GiB on top of an LLM; coexists
+    # with gpt-oss-20b (19215 MiB peak of a 23552 MiB pool).
+    SD="${MODELCTL_SD_DIR:-/mnt/data/stable-diffusion-models}"
+    exec sd-server -m "$SD/sd_turbo.safetensors" --type f16 \
+      --listen-ip 127.0.0.1 --listen-port "${MODELCTL_SD_PORT:-8091}" "${@:2}" ;;
   list)
     printf '%-16s %-9s %-7s %s\n' MODE CTX 'OS FREE' NOTE
     printf '%-16s %-9s %-7s %s\n' default 131072 '13.7G' 'gpt-oss-20b - the default'
     printf '%-16s %-9s %-7s %s\n' big 16384 '8.7G' 'qwen3-coder-30b - batch only'
     printf '%-16s %-9s %-7s %s\n' vision 16384 '~18G' 'gemma-4-12B-it-QAT + mmproj'
     printf '%-16s %-9s %-7s %s\n' fast 32768 '~23G' 'qwen3-4b - 29 tok/s'
+    printf '%-16s %-9s %-7s %s\n' image 'n/a' '~4.5G' 'SD-Turbo on :8091 - coexists with an LLM'
     echo; echo "port: $PORT (override with MODELCTL_PORT)"
     ls -1 "$M" 2>/dev/null | sed 's/^/  /' ;;
   *)

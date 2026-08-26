@@ -6,7 +6,10 @@
 set -euo pipefail
 SRC="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p ~/.config/omarchy/plugins ~/.config/omarchy/bar/scripts ~/.config/systemd/user ~/.local/bin
-ln -sfn "$SRC/plugin" ~/.config/omarchy/plugins/tj.modelctl
+# A symlinked plugin DIRECTORY is registered but never hot-reloaded — the shell's
+# file watcher does not follow it. Real dir, symlinked files.
+mkdir -p ~/.config/omarchy/plugins/tj.modelctl
+for f in "$SRC"/plugin/*; do ln -sf "$f" ~/.config/omarchy/plugins/tj.modelctl/"$(basename "$f")"; done
 for f in "$SRC"/bin/modelctl-*; do ln -sf "$f" ~/.config/omarchy/bar/scripts/"$(basename "$f")"; done
 ln -sf "$SRC/bin/modelctl" ~/.local/bin/modelctl
 for u in "$SRC"/systemd/*.service; do [ -e "$u" ] && ln -sf "$u" ~/.config/systemd/user/"$(basename "$u")"; done

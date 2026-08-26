@@ -37,6 +37,19 @@
     "checked": "systemctl --user is-active --quiet modelctl@fast.service"
   },
 
+"modelctl.image": {
+    "icon": "",
+    "label": "SD-Turbo (images)",
+    "description": "Resident on :8091 · +4.5 GiB · coexists with an LLM",
+    "action": "systemctl --user start modelctl@image.service",
+    "checked": "systemctl --user is-active --quiet modelctl@image.service"
+  },
+  "modelctl.generate": {
+    "icon": "󰋩",
+    "label": "Generate image…",
+    "description": "One-shot SD-Turbo · ~9s · does not hold the pool",
+    "action": "~/.config/omarchy/bar/scripts/modelctl-image"
+  },
   "modelctl.sep": {
     "icon": "",
     "label": "────────────────",

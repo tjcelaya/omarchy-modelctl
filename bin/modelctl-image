@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# One-shot image generation with SD-Turbo. Loads and exits, so it never holds the
+# GPU pool. Uses Omarchy's native input popup — gum in a floating terminal never
+# reliably got keyboard focus.
+set -uo pipefail
+SD="${MODELCTL_SD_DIR:-/mnt/data/stable-diffusion-models}"
+# Where images land. Override per-invocation, or set MODELCTL_IMAGE_DIR in the
+# environment / the plugin's imageDir setting for a permanent change.
+OUT="${MODELCTL_IMAGE_DIR:-$HOME/Pictures/generated}"
+mkdir -p "$OUT" 2>/dev/null || { notify-send -a modelctl -u critical "Cannot write" "$OUT"; exit 1; }
+
+prompt="${*:-}"
+if [ -z "$prompt" ]; then
+  prompt=$(omarchy-menu-input "Describe the image" --width 600 2>/dev/null) || exit 0
+fi
+prompt="$(printf '%s' "$prompt" | tr -d '\r\n')"
+[ -z "$prompt" ] && exit 0
+
+slug=$(printf '%s' "$prompt" | tr -cs '[:alnum:]' '-' | cut -c1-40 | sed 's/^-//;s/-$//')
+f="$OUT/$(date +%Y%m%d-%H%M%S)-${slug:-image}.png"
+
+notify-send -a modelctl -i image "Generating image…" "$prompt"
+if sd-cli -m "$SD/sd_turbo.safetensors" --type f16 -p "$prompt" \
+     --steps "${SD_STEPS:-4}" --cfg-scale 1.0 -W "${SD_W:-512}" -H "${SD_H:-512}" \
+     -o "$f" >/tmp/modelctl-image.log 2>&1 && [ -s "$f" ]; then
+  notify-send -a modelctl -i "$f" "Image ready" "$(basename "$f")"
+  uwsm-app -- imv "$f" >/dev/null 2>&1 || xdg-open "$f" >/dev/null 2>&1 &
+else
+  notify-send -a modelctl -u critical "Generation failed" "$(tail -3 /tmp/modelctl-image.log | tr '\n' ' ')"
+fi

@@ -6,21 +6,55 @@
   "author": "tj",
   "license": "MIT",
   "description": "Local llama.cpp model server control plus live herdr agent list in the Omarchy bar.",
-  "kinds": ["bar-widget"],
-  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
   "barWidget": {
     "displayName": "modelctl",
     "description": "Shows the loaded local model and every running herdr agent. Click a model to switch, an agent to focus its pane.",
     "category": "AI",
     "allowMultiple": false,
     "defaultSection": "center",
-    "defaults": { "refreshIntervalSec": 5, "port": 8090, "showCwd": true },
+    "defaults": {
+      "refreshIntervalSec": 5,
+      "port": 8090,
+      "showCwd": true,
+      "imageDir": "~/Pictures/generated"
+    },
     "schema": [
-      { "key": "refreshIntervalSec", "type": "integer", "label": "Refresh interval (seconds)",
-        "min": 2, "max": 120, "step": 1, "defaultValue": 5 },
-      { "key": "port", "type": "integer", "label": "llama-server port",
-        "min": 1024, "max": 65535, "step": 1, "defaultValue": 8090 },
-      { "key": "showCwd", "type": "boolean", "label": "Show agent working directory", "defaultValue": true }
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 2,
+        "max": 120,
+        "step": 1,
+        "defaultValue": 5
+      },
+      {
+        "key": "port",
+        "type": "integer",
+        "label": "llama-server port",
+        "min": 1024,
+        "max": 65535,
+        "step": 1,
+        "defaultValue": 8090
+      },
+      {
+        "key": "showCwd",
+        "type": "boolean",
+        "label": "Show agent working directory",
+        "defaultValue": true
+      },
+      {
+        "key": "imageDir",
+        "type": "string",
+        "label": "Generated image folder",
+        "defaultValue": "~/Pictures/generated"
+      }
     ]
   }
 }

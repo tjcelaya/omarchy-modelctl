@@ -19,9 +19,12 @@ if [ -n "$active" ]; then
     state="loading"
   fi
 fi
+img="off"
+if systemctl --user is-active --quiet modelctl@image.service; then img="on"; fi
+
 freemem=$(free -m | awk '/Mem:/ {printf "%.1f GiB", $7/1024}')
 
-export MC_STATE="$state" MC_MODEL="${model:-}" MC_FREE="$freemem" MC_UNIT="$active"
+export MC_STATE="$state" MC_MODEL="${model:-}" MC_FREE="$freemem" MC_UNIT="$active" MC_IMG="$img"
 "$D/modelctl-agents" 2>/dev/null | python3 -c '
 import sys, json, os
 agents = []
@@ -35,5 +38,6 @@ print(json.dumps({"state": os.environ.get("MC_STATE", "off"),
                   "model": os.environ.get("MC_MODEL", ""),
                   "free":  os.environ.get("MC_FREE", ""),
                   "unit":  os.environ.get("MC_UNIT", ""),
+                  "image": os.environ.get("MC_IMG", "off") == "on",
                   "agents": agents}))
 '

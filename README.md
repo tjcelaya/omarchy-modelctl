@@ -3,12 +3,25 @@
 An Omarchy bar plugin for running local LLMs with llama.cpp, and for seeing every
 running [herdr](https://github.com/) coding agent at a glance.
 
-    󰚩 gpt-oss-20b  │  󱃒 claude ~/src ●  󱃒 opencode ~/src/snake
+    󰚩oss20  󰋩  󱃒2
 
-- **Model segment** — left-click opens a menu of local models, middle-click stops the
-  server, right-click tails its journal.
-- **Agent segments** — one per running herdr agent, live. Click to focus that pane.
-  `●` marks the focused agent; idle agents are dimmed.
+- **Model** (`󰚩` + abbreviation) — left-click for the model menu, middle-click stops
+  the server, right-click tails its journal.
+- **Images** (`󰋩`) — left-click generates one image with SD-Turbo (~9 s, 512x512);
+  right-click toggles a resident `sd-server` on :8091. Dim = one-shot, bright = resident.
+- **Agents** (`󱃒` + count) — click for the menu, which lists every running herdr
+  agent with its cwd and status. Selecting one focuses its pane.
+
+Names, paths and status live in the menu; the bar stays to icons and short tags.
+
+### Image generation
+
+Prompts via Omarchy's native input popup, saves to `~/Pictures/generated` as
+`<timestamp>-<prompt-slug>.png`, then opens it. Override the folder with
+`MODELCTL_IMAGE_DIR` or the `imageDir` setting; `SD_STEPS`, `SD_W`, `SD_H` tune the rest.
+
+Measured on this machine: SD-Turbo costs ~4.5 GiB and **coexists with gpt-oss-20b**
+(19,215 MiB peak of a 23,552 MiB pool), so you do not have to unload the LLM.
 
 Deliberately separate from Omarchy's built-in `omarchy.agents`, which reports Claude
 subscription usage rather than running sessions.
