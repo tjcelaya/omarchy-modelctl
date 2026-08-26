@@ -27,8 +27,11 @@ if rows:
         agent,cwd,status,focused,pane=(r+[""]*5)[:5]
         mark=" ●" if focused=="1" else ""
         j=lambda v: json.dumps(v, ensure_ascii=False)
+        # The menu card is a hardcoded 300px, so long cwds truncate. Show the
+        # last path segment; the full path stays in the description.
+        short=cwd.rstrip("/").split("/")[-1] or cwd
         extra.append('  "modelctl.agent%d": {"icon":"\U000f10d2","label":%s,"description":%s,"action":%s},'
-            % (i, j(f"{agent}  {cwd}{mark}"), j(f"{status} · pane {pane}"), j(f"herdr agent focus {pane}")))
+            % (i, j(f"{agent} · {short}{mark}"), j(f"{cwd} · {status} · {pane}"), j(f"herdr agent focus {pane}")))
 body=s.rstrip().rstrip("}").rstrip().rstrip(",")
 tail="\n".join(extra).rstrip(",")
 open(out,"w").write(body + (",\n" if extra else "\n") + tail + "\n}\n")

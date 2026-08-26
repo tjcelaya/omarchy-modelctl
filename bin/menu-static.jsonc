@@ -24,7 +24,7 @@
   },
   "modelctl.vision": {
     "icon": "",
-    "label": "gemma-4-12B (vision)",
+    "label": "gemma-4-12B · vision",
     "description": "16k ctx · accepts images · ~35s per image query",
     "action": "~/.config/omarchy/bar/scripts/modelctl-switch vision",
     "checked": "systemctl --user is-active --quiet modelctl@vision.service"
@@ -39,20 +39,20 @@
 
 "modelctl.image": {
     "icon": "",
-    "label": "SD-Turbo (images)",
+    "label": "Image server",
     "description": "Resident on :8091 · +4.5 GiB · coexists with an LLM",
     "action": "systemctl --user start modelctl@image.service",
     "checked": "systemctl --user is-active --quiet modelctl@image.service"
   },
   "modelctl.generate": {
     "icon": "󰋩",
-    "label": "Generate image (Turbo)…",
+    "label": "Image · Turbo",
     "description": "4 steps · ~9s · fast drafts",
     "action": "~/.config/omarchy/bar/scripts/modelctl-image --turbo"
   },
   "modelctl.generate15": {
     "icon": "󰋩",
-    "label": "Generate image (SD 1.5)…",
+    "label": "Image · SD 1.5",
     "description": "20 steps · slower · responds to guidance, steers harder",
     "action": "~/.config/omarchy/bar/scripts/modelctl-image --sd15"
   },
