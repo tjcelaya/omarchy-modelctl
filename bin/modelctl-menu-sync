@@ -38,7 +38,7 @@ if expanded:
                    f'"description":{json.dumps(desc)},'
                    f'"action":"{SB}/modelctl-sd select {mid}",'
                    f'"checked":"[ \\"$(cat ~/.local/state/modelctl/sd-model 2>/dev/null)\\" = {mid} ]"}},')
-    img.append('  "modelctl.sdserver": {"icon":"","label":"· Keep loaded (API :8091)",'
+    img.append('  "modelctl.sdserver": {"icon":"","label":"· Keep loaded",'
                '"description":"Toggle a resident sd-server · without it each image loads fresh (~1.4s)",'
                '"action":"systemctl --user is-active --quiet modelctl@image.service '
                '&& systemctl --user stop modelctl@image.service '
