@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Verify the bar menu's agent rows match herdr exactly. Exit 1 on divergence.
+set -u
+D="$HOME/src/local-ai-kit/bar-scripts"
+a=$("$D/modelctl-agents" | awk -F'\t' '{print $1"|"$2"|"$3"|"$5}' | sort)
+b=$(python3 -c "
+import json,re,os
+s=open(os.path.expanduser('~/.config/omarchy/extensions/omarchy-menu.jsonc')).read()
+d=json.loads(re.sub(r'^\s*//.*\$','',s,flags=re.M))
+out=[]
+for k,v in d.items():
+    if re.match(r'modelctl\.agent\d',k):
+        lab=v['label'].replace(' ●','')
+        agent,cwd=lab.split('  ',1)
+        st=v['description'].split(' · pane ')[0]; pane=v['description'].split(' · pane ')[1]
+        out.append('|'.join([agent,cwd.strip(),st,pane]))
+print('\n'.join(sorted(out)))" 2>/dev/null)
+if [ "$a" = "$b" ]; then echo "IN SYNC ($(printf '%s' "$a" | grep -c . ) agents)"; else
+  echo "DIVERGED"; echo "--- herdr ---"; echo "$a"; echo "--- bar ---"; echo "$b"; exit 1; fi

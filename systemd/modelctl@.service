@@ -1,0 +1,12 @@
+[Unit]
+Description=Local model server (%i)
+Documentation=file:///home/tj/src/local-ai-kit/MEASURED-framework13.md
+After=graphical-session.target
+
+[Service]
+Type=exec
+ExecStart=%h/.local/bin/modelctl %i
+Restart=on-failure
+RestartSec=5
+MemoryMax=22G
+Nice=5

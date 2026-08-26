@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Rewrite the agent rows in the Omarchy menu extension; refresh only when the set
+# changed. The menu's `provider` mechanism is a closed set hardcoded in Menu.qml,
+# so dynamic rows must be written into the JSONC.
+set -u
+FORCE=0; [ "${1:-}" = "--force" ] && FORCE=1
+D="$HOME/src/local-ai-kit/bar-scripts"
+EXT="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
+STATIC="$D/menu-static.jsonc"
+STAMP="${XDG_RUNTIME_DIR:-/tmp}/modelctl-agents.stamp"
+[ -f "$STATIC" ] || exit 0
+
+rowfile=$(mktemp); "$D/modelctl-agents" > "$rowfile" 2>/dev/null
+sig=$(sha256sum < "$rowfile" | cut -d' ' -f1)
+if [ $FORCE -eq 0 ] && [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$sig" ]; then rm -f "$rowfile"; exit 0; fi
+
+tmp=$(mktemp)
+python3 - "$STATIC" "$tmp" "$rowfile" <<'PY'
+import sys,json
+static,out,rowfile=sys.argv[1],sys.argv[2],sys.argv[3]
+rows=[l.split("\t") for l in open(rowfile).read().splitlines() if l.strip()]
+s=open(static).read()
+extra=[]
+if rows:
+    extra.append('  "modelctl.agentsep": {"icon":"","label":"────────────────","description":"","action":"true"},')
+    for i,r in enumerate(rows):
+        agent,cwd,status,focused,pane=(r+[""]*5)[:5]
+        mark=" ●" if focused=="1" else ""
+        j=lambda v: json.dumps(v, ensure_ascii=False)
+        extra.append('  "modelctl.agent%d": {"icon":"\U000f10d2","label":%s,"description":%s,"action":%s},'
+            % (i, j(f"{agent}  {cwd}{mark}"), j(f"{status} · pane {pane}"), j(f"herdr agent focus {pane}")))
+body=s.rstrip().rstrip("}").rstrip().rstrip(",")
+tail="\n".join(extra).rstrip(",")
+open(out,"w").write(body + (",\n" if extra else "\n") + tail + "\n}\n")
+PY
+if python3 -c "
+import json,re,sys
+s=open('$tmp').read(); json.loads(re.sub(r'^\s*//.*\$','',s,flags=re.M))" 2>/dev/null; then
+  mv "$tmp" "$EXT"; printf '%s' "$sig" > "$STAMP"; omarchy menu refresh >/dev/null 2>&1
+else rm -f "$tmp"; fi
+rm -f "$rowfile"

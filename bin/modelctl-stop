@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Stop whichever model is resident, releasing the GPU pool.
+set -u
+stopped=0
+for u in modelctl.service $(systemctl --user list-units --plain --no-legend 'modelctl@*.service' 2>/dev/null | awk '{print $1}'); do
+  systemctl --user is-active --quiet "$u" && { systemctl --user stop "$u"; stopped=1; }
+done
+[ $stopped -eq 1 ] && notify-send -a modelctl -i computer "Local model server" "Stopped — GPU pool released" \
+                   || notify-send -a modelctl -i computer "Local model server" "Already stopped"

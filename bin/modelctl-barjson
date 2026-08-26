@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Compact state for the QML bar module: loaded model + every herdr agent.
+set -u
+PORT="${MODELCTL_PORT:-8090}"
+D="$HOME/src/local-ai-kit/bar-scripts"
+
+active=""
+for u in modelctl.service $(systemctl --user list-units --plain --no-legend 'modelctl@*.service' 2>/dev/null | awk '{print $1}'); do
+  if systemctl --user is-active --quiet "$u"; then active="$u"; break; fi
+done
+
+model=""; state="off"
+if [ -n "$active" ]; then
+  if curl -sf -m 1 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
+    state="ready"
+    model=$(curl -sf -m 1 "http://127.0.0.1:$PORT/v1/models" 2>/dev/null \
+            | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"][0]["id"])' 2>/dev/null || true)
+  else
+    state="loading"
+  fi
+fi
+freemem=$(free -m | awk '/Mem:/ {printf "%.1f GiB", $7/1024}')
+
+export MC_STATE="$state" MC_MODEL="${model:-}" MC_FREE="$freemem" MC_UNIT="$active"
+"$D/modelctl-agents" 2>/dev/null | python3 -c '
+import sys, json, os
+agents = []
+for line in sys.stdin.read().splitlines():
+    if not line.strip():
+        continue
+    p = (line.split("\t") + [""] * 5)[:5]
+    agents.append({"name": p[0], "cwd": p[1], "status": p[2],
+                   "focused": p[3] == "1", "pane": p[4]})
+print(json.dumps({"state": os.environ.get("MC_STATE", "off"),
+                  "model": os.environ.get("MC_MODEL", ""),
+                  "free":  os.environ.get("MC_FREE", ""),
+                  "unit":  os.environ.get("MC_UNIT", ""),
+                  "agents": agents}))
+'

@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# modelctl — llama-server launcher tuned for THIS machine: Framework 13, Ryzen 5 7640U,
+# Radeon 760M (gfx1103), GTT raised to 19456 MiB -> 23552 MiB Vulkan pool.
+# All context sizes below are MEASURED, not estimated. See MEASURED-framework13.md.
+#
+#   modelctl              # default: gpt-oss-20b @131k  (use this one)
+#   modelctl big          # qwen3-coder-30b @16k        (batch coding only, 2.5x slower)
+#   modelctl vision       # gemma-4-12B-it-QAT @16k     (accepts images)
+#   modelctl fast         # qwen3-4b @32k               (quick chat / smoke test)
+#   modelctl list         # what's installed
+set -euo pipefail
+
+# Model roots. These go through ~/.lmstudio/models/, which is symlinked at the
+# store on the shared data partition -- so this script does not care WHERE that
+# partition is mounted. Re-point the symlink, not this file.
+# Override with MODELCTL_MODEL_DIR if you keep GGUFs somewhere else entirely.
+MROOT="${MODELCTL_MODEL_DIR:-$HOME/.lmstudio/models}"
+M="$MROOT/lmstudio-community"
+M4="$MROOT/unsloth"
+PORT="${MODELCTL_PORT:-8090}"
+
+# Preflight: a dangling symlink (partition not mounted) otherwise surfaces as an
+# opaque llama-server failure. Fail loudly with the actual fix instead.
+if [ "${1:-}" != "list" ] && [ ! -d "$M" ]; then
+  echo "modelctl: model store not found at $M" >&2
+  if [ -L "$MROOT/lmstudio-community" ]; then
+    echo "modelctl: symlink is dangling -> $(readlink "$MROOT/lmstudio-community")" >&2
+    echo "modelctl: the shared data partition is probably not mounted." >&2
+    echo "modelctl:   findmnt -S UUID=77DB-958F   # where is it?" >&2
+    echo "modelctl:   sudo mount -a               # if it has an fstab entry" >&2
+    echo "modelctl: then re-point the symlink if the mountpoint changed:" >&2
+    echo "modelctl:   ln -sfn <mnt>/lm-studio-models/lmstudio-community $MROOT/lmstudio-community" >&2
+  fi
+  exit 1
+fi
+
+# -ngl 99      : NEVER lower it. Partial offload does not save memory on this UMA
+#                iGPU and hung the GPU at -ngl 24. Fits fully or don't use the GPU.
+# -np 1        : parallel slots divide the KV budget; a request landing on a cold
+#                slot re-prefills the whole system prompt from scratch.
+# --cache-reuse: keeps the shared prefix cached -> ~1s/turn instead of ~54s.
+# --jinja      : required by gemma-4 ("this custom template is not supported"),
+#                harmless elsewhere.
+COMMON=(-ngl 99 -fa on -ctk q8_0 -ctv q8_0 -np 1 --cache-reuse 256 --jinja
+        --host 127.0.0.1 --port "$PORT")
+
+case "${1:-default}" in
+  default|general|code|coder)
+    # 14389 MiB peak @131k, leaves 13.7 GiB to the OS. Best model on this box:
+    # 2.5x the prefill of the 30B and 21% faster decode.
+    exec llama-server -m "$M/gpt-oss-20b-GGUF/gpt-oss-20b-MXFP4.gguf" \
+      -c 131072 -a gpt-oss-20b "${COMMON[@]}" "${@:2}" ;;
+  big)
+    # 20074 MiB peak @16k, leaves 8.7 GiB. Slower on every axis than gpt-oss-20b;
+    # only worth it if its code quality proves better for a given job.
+    exec llama-server -m "$M/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf" \
+      -c 16384 -a qwen3-coder-30b "${COMMON[@]}" "${@:2}" ;;
+  vision)
+    exec llama-server -m "$M/gemma-4-12B-it-QAT-GGUF/gemma-4-12B-it-QAT-Q4_0.gguf" \
+      --mmproj "$M/gemma-4-12B-it-QAT-GGUF/mmproj-gemma-4-12B-it-QAT-BF16.gguf" \
+      -c 16384 -a gemma-4-12b "${COMMON[@]}" "${@:2}" ;;
+  fast)
+    exec llama-server -m "$M4/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf" \
+      -c 32768 -a qwen3-4b "${COMMON[@]}" "${@:2}" ;;
+  list)
+    printf '%-16s %-9s %-7s %s\n' MODE CTX 'OS FREE' NOTE
+    printf '%-16s %-9s %-7s %s\n' default 131072 '13.7G' 'gpt-oss-20b - the default'
+    printf '%-16s %-9s %-7s %s\n' big 16384 '8.7G' 'qwen3-coder-30b - batch only'
+    printf '%-16s %-9s %-7s %s\n' vision 16384 '~18G' 'gemma-4-12B-it-QAT + mmproj'
+    printf '%-16s %-9s %-7s %s\n' fast 32768 '~23G' 'qwen3-4b - 29 tok/s'
+    echo; echo "port: $PORT (override with MODELCTL_PORT)"
+    ls -1 "$M" 2>/dev/null | sed 's/^/  /' ;;
+  *)
+    sed -n '4,11p' "$0" | sed 's/^# \?//' >&2; exit 1 ;;
+esac

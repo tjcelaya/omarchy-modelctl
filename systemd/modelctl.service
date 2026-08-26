@@ -1,0 +1,16 @@
+[Unit]
+Description=Local model server (default: gpt-oss-20b @131k)
+Documentation=file:///home/tj/src/local-ai-kit/MEASURED-framework13.md
+After=graphical-session.target
+
+[Service]
+Type=exec
+ExecStart=%h/.local/bin/modelctl
+Restart=on-failure
+RestartSec=5
+# Backstop so a runaway server can't starve the desktop. Vulkan pool is 23552 MiB.
+MemoryMax=22G
+Nice=5
+
+[Install]
+WantedBy=default.target

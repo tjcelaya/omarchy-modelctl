@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Bar status for the local model server.
+# Deliberately separate from omarchy.agents, which tracks Claude subscription usage.
+PORT="${MODELCTL_PORT:-8090}"
+D="$HOME/src/local-ai-kit/bar-scripts"
+# Keep the menu's agent rows in step. No-ops unless the agent set changed.
+"$D/modelctl-menu-sync" >/dev/null 2>&1 &
+NAGENTS=$("$D/modelctl-agents" 2>/dev/null | grep -c . || echo 0)
+badge=""; [ "$NAGENTS" -gt 0 ] && badge=" · $NAGENTS"
+agentline=""; [ "$NAGENTS" -gt 0 ] && agentline="\n${NAGENTS} agent(s) running"
+j() { printf '{"text":"%s","tooltip":"%s","class":"%s"}\n' "$1" "$2" "$3"; }
+HINT='Left-click: menu  ·  Middle-click: stop  ·  Right-click: logs'
+
+active=""
+for u in modelctl.service $(systemctl --user list-units --plain --no-legend 'modelctl@*.service' 2>/dev/null | awk '{print $1}'); do
+  systemctl --user is-active --quiet "$u" && { active="$u"; break; }
+done
+
+if [ -z "$active" ]; then
+  j "󰚩 off${badge}" "Local model server: stopped${agentline}\\nLeft-click: choose a model" "inactive"; exit 0
+fi
+
+if curl -sf -m 1 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
+  free=$(free -m | awk '/Mem:/{printf "%.1f GiB", $7/1024}')
+  model=$(curl -sf -m 1 "http://127.0.0.1:$PORT/v1/models" 2>/dev/null \
+          | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"][0]["id"])' 2>/dev/null)
+  j "󰚩 ${model:-local}${badge}" "READY on :$PORT  ($active)\\nOS free: ${free}${agentline}\\n${HINT}" "active"
+else
+  j "󰚩 ···${badge}" "Loading (~35s cold prefill)  ($active)${agentline}\\n${HINT}" "loading"
+fi
