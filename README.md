@@ -33,10 +33,11 @@ Measured 2026-08-26 at native res on the 23,552 MiB pool, `--vae-tiling` on:
 | `flux` | Flux.1-schnell Q8 | 1024² | 4 | ~2m30 | 18.6 GiB | no |
 | `chroma` | Chroma1-HD Q8 | 1024² | 20 | ~22 min | 15.6 GiB | no |
 
-Models marked `⏏` in the menu (`flux`, `chroma`) stop whatever `modelctl@*` LLM unit is
-running for the duration and start it again afterwards (verified: gpt-oss-20b back and
-active after a Flux run, 2m35 total). `zimage` is not parked automatically — with
-gpt-oss-20b loaded it will overflow the pool; switch to `fast` or stop the LLM first.
+Before generating, the script reads the amdgpu memory counters; if the model's measured
+peak would not fit next to what is loaded, it stops the running `modelctl@*` LLM unit
+and starts it again afterwards (verified: gpt-oss-20b active again after a Flux run,
+2m35 total). So `zimage` runs beside `fast` untouched but parks `default`; `flux` and
+`chroma` (`⏏` in the menu) park anything.
 Checkpoints live in `$MODELCTL_SD_DIR` (default `/mnt/data/stable-diffusion-models`).
 
 Deliberately separate from Omarchy's built-in `omarchy.agents`, which reports Claude

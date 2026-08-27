@@ -5,16 +5,16 @@
 set -uo pipefail
 SD="${MODELCTL_SD_DIR:-/mnt/data/stable-diffusion-models}"
 
-# Model table: id | label | description | big(1=needs LLM unloaded) | steps | cfg | res | sd-cli args
+# Model table: id | label | description | peak GPU MiB | steps | cfg | res | sd-cli args
 # Peak GPU MiB measured 2026-08-26 at native res with --vae-tiling (23.5 GiB pool):
 # turbo/sd15 <5G, sdxl 7.6G, zimage 11.6G, flux 18.6G, chroma 15.6G.
 models() { cat <<EOF
-turbo|· Turbo|512² · 4 steps · ~9s · drafts|0|4|1.0|512|-m $SD/sd_turbo.safetensors --type f16
-sd15|· SD 1.5|512² · 20 steps · ~32s · steers harder|0|20|7.0|512|-m $SD/v1-5-pruned-emaonly-fp16.safetensors --type f16
-sdxl|· SDXL-Lightning|1024² · 4 steps · ~36s · fits beside LLM|0|4|1.0|1024|-m $SD/sdxl_lightning_4step.safetensors --vae $SD/sdxl_vae_fp16_fix.safetensors --sampling-method euler --scheduler sgm_uniform --diffusion-fa --vae-tiling
-zimage|· Z-Image-Turbo|1024² · 8 steps · ~3m20 · best quality/size|0|8|1.0|1024|--diffusion-model $SD/z_image_turbo-Q8_0.gguf --vae $SD/flux_ae.safetensors --llm $SD/Qwen3-4B-Instruct-2507-Q8_0.gguf --diffusion-fa --vae-tiling
-flux|· Flux.1-schnell|1024² · 4 steps · ~2m30 · unloads LLM|1|4|1.0|1024|--diffusion-model $SD/flux1-schnell-Q8_0.gguf --vae $SD/flux_ae.safetensors --clip_l $SD/clip_l.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --diffusion-fa --vae-tiling
-chroma|· Chroma1-HD|1024² · 20 steps · ~22m · unloads LLM|1|20|4.0|1024|--diffusion-model $SD/Chroma1-HD-Q8_0.gguf --vae $SD/flux_ae.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --sampling-method euler --diffusion-fa --vae-tiling
+turbo|· Turbo|512² · 4 steps · ~9s · drafts|4500|4|1.0|512|-m $SD/sd_turbo.safetensors --type f16
+sd15|· SD 1.5|512² · 20 steps · ~32s · steers harder|4000|20|7.0|512|-m $SD/v1-5-pruned-emaonly-fp16.safetensors --type f16
+sdxl|· SDXL-Lightning|1024² · 4 steps · ~36s · fits beside LLM|7600|4|1.0|1024|-m $SD/sdxl_lightning_4step.safetensors --vae $SD/sdxl_vae_fp16_fix.safetensors --sampling-method euler --scheduler sgm_uniform --diffusion-fa --vae-tiling
+zimage|· Z-Image-Turbo|1024² · 8 steps · ~3m20 · best quality/size|11600|8|1.0|1024|--diffusion-model $SD/z_image_turbo-Q8_0.gguf --vae $SD/flux_ae.safetensors --llm $SD/Qwen3-4B-Instruct-2507-Q8_0.gguf --diffusion-fa --vae-tiling
+flux|· Flux.1-schnell|1024² · 4 steps · ~2m30 · 18.6G|18600|4|1.0|1024|--diffusion-model $SD/flux1-schnell-Q8_0.gguf --vae $SD/flux_ae.safetensors --clip_l $SD/clip_l.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --diffusion-fa --vae-tiling
+chroma|· Chroma1-HD|1024² · 20 steps · ~22m · 15.6G|15600|20|4.0|1024|--diffusion-model $SD/Chroma1-HD-Q8_0.gguf --vae $SD/flux_ae.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --sampling-method euler --diffusion-fa --vae-tiling
 EOF
 }
 if [ "${1:-}" = --list ]; then models | cut -d'|' -f1-4; exit 0; fi
@@ -28,7 +28,7 @@ case "${1:-}" in
   --*)         MODEL="${1#--}"; shift ;;
 esac
 row=$(models | grep "^$MODEL|") || { notify-send -a modelctl -u critical "Unknown image model" "$MODEL"; exit 1; }
-IFS='|' read -r _ _ _ BIG DEF_STEPS DEF_CFG DEF_RES ARGS <<<"$row"
+IFS='|' read -r _ _ _ PEAK DEF_STEPS DEF_CFG DEF_RES ARGS <<<"$row"
 # First path-ish token is the checkpoint; check it exists so failures are loud.
 CKPT=$(printf '%s\n' $ARGS | grep -m1 "^$SD/")
 [ -f "$CKPT" ] || { notify-send -a modelctl -u critical "Missing checkpoint" "$CKPT"; exit 1; }
@@ -47,13 +47,18 @@ prompt="$(printf '%s' "$prompt" | tr -d '\r\n')"
 slug=$(printf '%s' "$prompt" | tr -cs '[:alnum:]' '-' | cut -c1-40 | sed 's/^-//;s/-$//')
 f="$OUT/$(date +%Y%m%d-%H%M%S)-${MODEL}-${slug:-image}.png"
 
-# Big models need the whole GPU pool: park any running LLM unit and bring it back after.
+# Park the running LLM unit only if this model would not fit next to it; restore after.
+# Pool = VRAM carve-out + GTT ceiling; usage read from the amdgpu sysfs counters.
+gpu_pool() { local d; for d in /sys/class/drm/card*/device; do
+  [ -e "$d/mem_info_vram_total" ] && { echo $(( ($(cat "$d/mem_info_vram_total")+$(cat "$d/mem_info_gtt_total"))/1048576 )); return; }; done; echo 23552; }
+gpu_used() { local d; for d in /sys/class/drm/card*/device; do
+  [ -e "$d/mem_info_vram_used" ] && { echo $(( ($(cat "$d/mem_info_vram_used")+$(cat "$d/mem_info_gtt_used"))/1048576 )); return; }; done; echo 0; }
 PARKED=""
-if [ "$BIG" = 1 ]; then
+if [ $(( $(gpu_used) + PEAK )) -gt $(gpu_pool) ]; then
   PARKED=$(systemctl --user list-units --plain --no-legend 'modelctl*.service' 2>/dev/null \
            | awk '$4=="running"{print $1}' | grep -v '@image' | head -1)
   if [ -n "$PARKED" ]; then
-    notify-send -a modelctl -i image "Unloading $PARKED" "$MODEL needs the whole GPU · it comes back after"
+    notify-send -a modelctl -i image "Unloading $PARKED" "$MODEL needs ~${PEAK} MiB · it comes back after"
     systemctl --user stop "$PARKED"
   fi
 fi

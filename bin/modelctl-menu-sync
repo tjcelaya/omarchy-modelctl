@@ -36,8 +36,8 @@ if expanded:
     tbl=subprocess.run([os.path.expanduser("~/src/omarchy-modelctl/bin/modelctl-image"),"--list"],
                        capture_output=True,text=True).stdout
     for line in tbl.splitlines():
-        mid,lab,desc,big=line.split("|")
-        if big=="1": lab+=" ⏏"   # parks the running LLM for the duration
+        mid,lab,desc,peak=line.split("|")
+        if int(peak)>9000: lab+=" ⏏"   # may park the running LLM for the duration
         img.append(f'  "modelctl.sd{mid}": {{"icon":"","label":{json.dumps(lab)},'
                    f'"description":{json.dumps(desc)},'
                    f'"action":"{SB}/modelctl-sd select {mid}",'
