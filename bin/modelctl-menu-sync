@@ -16,23 +16,34 @@ if [ $FORCE -eq 0 ] && [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$sig" ]; then r
 
 tmp=$(mktemp)
 MC_BIN="$D" python3 - "$STATIC" "$tmp" "$rowfile" <<'PY'
-import sys,json,os
+import sys,json,os,re
 static,out,rowfile=sys.argv[1],sys.argv[2],sys.argv[3]
 rows=[l.split("\t") for l in open(rowfile).read().splitlines() if l.strip()]
 s=open(static).read().replace("@BIN@", os.environ["MC_BIN"])
+import subprocess
+SB=os.environ["MC_BIN"]
+# ── model rows: whatever `modelctl list` discovers on disk ──
+mrows=[]
+for line in subprocess.run([SB+"/modelctl","list","--tsv"],capture_output=True,text=True).stdout.splitlines():
+    mid,label,tag,ctx,note,path,vis=(line.split("\t")+[""]*7)[:7]
+    desc=" · ".join(x for x in [f"{int(ctx)//1024}k ctx", "vision" if vis=="1" else "", note] if x)
+    mrows.append('  "modelctl.m.%s": {"icon":"","label":%s,"description":%s,"action":%s,"checked":%s},'
+        % (re.sub(r"[^A-Za-z0-9_]","_",mid), json.dumps(label,ensure_ascii=False), json.dumps(desc,ensure_ascii=False),
+           json.dumps(f"{SB}/modelctl-switch {mid}"), json.dumps(f"systemctl --user is-active --quiet 'modelctl@{mid}.service'")))
+if not mrows:
+    mrows.append('  "modelctl.m.none": {"icon":"","label":"No GGUF models found","description":"Set MODELCTL_MODEL_DIRS or pull one with LM Studio / Ollama","action":"true"},')
+s=s.replace("// @MODEL_ROWS@","\n".join(mrows))
 
 # ── image section (own section; separator below is the static modelctl.sep) ──
 import os
 ST=os.path.expanduser("~/.local/state/modelctl")
 sel=(open(ST+"/sd-model").read().strip() if os.path.exists(ST+"/sd-model") else "turbo")
 expanded=os.path.exists(ST+"/sd-expanded")
-SB=os.environ["MC_BIN"]
 img=['  "modelctl.imgsep": {"icon":"","label":"────────────────","description":"","action":"true"},',
      '  "modelctl.sd": {"icon":"󰋩","label":"stable-diffusion","description":"Show model selection · bar 󰋩 generates with the selected one",'
      f'"action":"{SB}/modelctl-sd toggle-expand",'
      '"checked":"[ -e ~/.local/state/modelctl/sd-expanded ]"},']
 if expanded:
-    import subprocess
     tbl=subprocess.run([SB+"/modelctl-image","--list"],
                        capture_output=True,text=True).stdout
     for line in tbl.splitlines():

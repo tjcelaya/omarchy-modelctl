@@ -19,4 +19,5 @@ PY
 fi
 rm -rf ~/.local/state/modelctl "${XDG_RUNTIME_DIR:-/tmp}/modelctl-agents.stamp"
 omarchy menu refresh >/dev/null 2>&1 || true
+echo "kept: ~/.config/modelctl/models.conf (your tuning)"
 echo "modelctl unwired. Now: omarchy plugin remove tjcelaya.modelctl"

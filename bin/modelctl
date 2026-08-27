@@ -1,82 +1,183 @@
-#!/usr/bin/env bash
-# modelctl — llama-server launcher tuned for THIS machine: Framework 13, Ryzen 5 7640U,
-# Radeon 760M (gfx1103), GTT raised to 19456 MiB -> 23552 MiB Vulkan pool.
-# All context sizes below are MEASURED, not estimated. See MEASURED-framework13.md.
-#
-#   modelctl              # default: gpt-oss-20b @131k  (use this one)
-#   modelctl big          # qwen3-coder-30b @16k        (batch coding only, 2.5x slower)
-#   modelctl vision       # gemma-4-12B-it-QAT @16k     (accepts images)
-#   modelctl fast         # qwen3-4b @32k               (quick chat / smoke test)
-#   modelctl list         # what's installed
-set -euo pipefail
+#!/usr/bin/env python3
+"""modelctl — launch a local GGUF model with llama-server, discovered from disk.
 
-# Model roots. These go through ~/.lmstudio/models/, which is symlinked at the
-# store on the shared data partition -- so this script does not care WHERE that
-# partition is mounted. Re-point the symlink, not this file.
-# Override with MODELCTL_MODEL_DIR if you keep GGUFs somewhere else entirely.
-MROOT="${MODELCTL_MODEL_DIR:-$HOME/.lmstudio/models}"
-M="$MROOT/lmstudio-community"
-M4="$MROOT/unsloth"
-PORT="${MODELCTL_PORT:-8090}"
+  modelctl                 start the default model (models.conf [defaults] default=, else first)
+  modelctl <id>            start that model            (id = GGUF filename without .gguf)
+  modelctl list            table of discovered models
+  modelctl list --tsv      id, label, tag, ctx, description, path, vision  (for scripts)
+  modelctl image           resident sd-server (see MODELCTL_SD_DIR)
+  modelctl show <id>       the exact llama-server command line, without running it
 
-# Preflight: a dangling symlink (partition not mounted) otherwise surfaces as an
-# opaque llama-server failure. Fail loudly with the actual fix instead.
-if [ "${1:-}" != "list" ] && [ ! -d "$M" ]; then
-  echo "modelctl: model store not found at $M" >&2
-  if [ -L "$MROOT/lmstudio-community" ]; then
-    echo "modelctl: symlink is dangling -> $(readlink "$MROOT/lmstudio-community")" >&2
-    echo "modelctl: the shared data partition is probably not mounted." >&2
-    echo "modelctl:   findmnt -S UUID=77DB-958F   # where is it?" >&2
-    echo "modelctl:   sudo mount -a               # if it has an fstab entry" >&2
-    echo "modelctl: then re-point the symlink if the mountpoint changed:" >&2
-    echo "modelctl:   ln -sfn <mnt>/lm-studio-models/lmstudio-community $MROOT/lmstudio-community" >&2
-  fi
-  exit 1
-fi
+Models are found under MODELCTL_MODEL_DIRS (colon-separated; default
+~/.lmstudio/models:~/.cache/llama.cpp:~/models:~/.ollama/models), recursively,
+following symlinks. `mmproj-*.gguf` files are never models: one sitting next to
+a model is attached as its vision projector. Sharded models are launched from
+shard 1. An Ollama store is recognised by its manifests/ folder: each pulled
+model (name:tag) is served straight from its GGUF blob, projector included —
+Ollama itself is not involved and need not be running.
 
-# -ngl 99      : NEVER lower it. Partial offload does not save memory on this UMA
-#                iGPU and hung the GPU at -ngl 24. Fits fully or don't use the GPU.
-# -np 1        : parallel slots divide the KV budget; a request landing on a cold
-#                slot re-prefills the whole system prompt from scratch.
-# --cache-reuse: keeps the shared prefix cached -> ~1s/turn instead of ~54s.
-# --jinja      : required by gemma-4 ("this custom template is not supported"),
-#                harmless elsewhere.
-COMMON=(-ngl 99 -fa on -ctk q8_0 -ctv q8_0 -np 1 --cache-reuse 256 --jinja
-        --host 127.0.0.1 --port "$PORT")
+Everything tunable is in ~/.config/modelctl/models.conf (INI). Nothing about a
+specific machine or model lives in this file. Example: models.conf.example.
+"""
+import configparser, fnmatch, json, os, re, shlex, sys
 
-case "${1:-default}" in
-  default|general|code|coder)
-    # 14389 MiB peak @131k, leaves 13.7 GiB to the OS. Best model on this box:
-    # 2.5x the prefill of the 30B and 21% faster decode.
-    exec llama-server -m "$M/gpt-oss-20b-GGUF/gpt-oss-20b-MXFP4.gguf" \
-      -c 131072 -a gpt-oss-20b "${COMMON[@]}" "${@:2}" ;;
-  big)
-    # 20074 MiB peak @16k, leaves 8.7 GiB. Slower on every axis than gpt-oss-20b;
-    # only worth it if its code quality proves better for a given job.
-    exec llama-server -m "$M/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf" \
-      -c 16384 -a qwen3-coder-30b "${COMMON[@]}" "${@:2}" ;;
-  vision)
-    exec llama-server -m "$M/gemma-4-12B-it-QAT-GGUF/gemma-4-12B-it-QAT-Q4_0.gguf" \
-      --mmproj "$M/gemma-4-12B-it-QAT-GGUF/mmproj-gemma-4-12B-it-QAT-BF16.gguf" \
-      -c 16384 -a gemma-4-12b "${COMMON[@]}" "${@:2}" ;;
-  fast)
-    exec llama-server -m "$M4/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf" \
-      -c 32768 -a qwen3-4b "${COMMON[@]}" "${@:2}" ;;
-  image)
-    # SD-Turbo resident on 8091. Measured: +4.5 GiB on top of an LLM; coexists
-    # with gpt-oss-20b (19215 MiB peak of a 23552 MiB pool).
-    SD="${MODELCTL_SD_DIR:-/mnt/data/stable-diffusion-models}"
-    exec sd-server -m "$SD/sd_turbo.safetensors" --type f16 \
-      --listen-ip 127.0.0.1 --listen-port "${MODELCTL_SD_PORT:-8091}" "${@:2}" ;;
-  list)
-    printf '%-16s %-9s %-7s %s\n' MODE CTX 'OS FREE' NOTE
-    printf '%-16s %-9s %-7s %s\n' default 131072 '13.7G' 'gpt-oss-20b - the default'
-    printf '%-16s %-9s %-7s %s\n' big 16384 '8.7G' 'qwen3-coder-30b - batch only'
-    printf '%-16s %-9s %-7s %s\n' vision 16384 '~18G' 'gemma-4-12B-it-QAT + mmproj'
-    printf '%-16s %-9s %-7s %s\n' fast 32768 '~23G' 'qwen3-4b - 29 tok/s'
-    printf '%-16s %-9s %-7s %s\n' image 'n/a' '~4.5G' 'SD-Turbo on :8091 - coexists with an LLM'
-    echo; echo "port: $PORT (override with MODELCTL_PORT)"
-    ls -1 "$M" 2>/dev/null | sed 's/^/  /' ;;
-  *)
-    sed -n '4,11p' "$0" | sed 's/^# \?//' >&2; exit 1 ;;
-esac
+HOME = os.path.expanduser("~")
+CONF = os.environ.get("MODELCTL_CONF", f"{HOME}/.config/modelctl/models.conf")
+DIRS = os.environ.get("MODELCTL_MODEL_DIRS",
+                      f"{HOME}/.lmstudio/models:{HOME}/.cache/llama.cpp:{HOME}/models:{HOME}/.ollama/models").split(":")
+PORT = os.environ.get("MODELCTL_PORT", "8090")
+# Sane, hardware-agnostic defaults. Full GPU offload, flash attention, one slot
+# with prefix caching (agent prompts are re-sent every turn), --jinja because a
+# few templates (gemma-4) refuse to run without it.
+DEFAULT_ARGS = "-ngl 99 -fa on -np 1 --cache-reuse 256 --jinja"
+DEFAULT_CTX = 16384
+QUANT_RE = re.compile(r"[-_.](?:I?Q\d[_A-Za-z0-9]*|MXFP4|BF16|F16|F32|UD-[A-Z0-9_]+)$", re.I)
+SHARD_RE = re.compile(r"-(\d{5})-of-\d{5}$")
+
+
+def load_conf():
+    cp = configparser.ConfigParser(interpolation=None)
+    cp.optionxform = str
+    if os.path.exists(CONF):
+        cp.read(CONF)
+    return cp
+
+
+def conf_for(cp, mid):
+    """[defaults] overlaid with every section whose name (a glob) matches the id."""
+    d = dict(cp["defaults"]) if cp.has_section("defaults") else {}
+    for sec in cp.sections():
+        if sec != "defaults" and fnmatch.fnmatchcase(mid, sec):
+            d.update(cp[sec])
+    return d
+
+
+def ollama_models(root):
+    """Yield (id, label, gguf-path, mmproj-path) for every manifest in an Ollama store."""
+    man = os.path.join(root, "manifests")
+    for dp, _, files in os.walk(man, followlinks=True):
+        for tag in files:
+            try:
+                d = json.load(open(os.path.join(dp, tag)))
+            except Exception:
+                continue
+            model = proj = ""
+            for layer in d.get("layers", []):
+                blob = os.path.join(root, "blobs", layer.get("digest", "").replace(":", "-"))
+                if layer.get("mediaType", "").endswith(".model"):
+                    model = blob
+                elif layer.get("mediaType", "").endswith(".projector"):
+                    proj = blob
+            if not model:
+                continue
+            # manifests/<registry>/<namespace>/<name>/<tag>; library/ is the implicit namespace
+            parts = os.path.relpath(dp, man).split(os.sep)
+            name = "/".join(p for p in parts[1:] if p != "library") or parts[-1]
+            yield f"{name}:{tag}", model, proj
+
+
+def discover(cp):
+    hide = [h for h in (cp.get("defaults", "hide", fallback="")).split() if h]
+    seen, models = set(), []
+
+    def add(mid, stem, path, dp, mmproj_default, label_default=None):
+        mid = re.sub(r"[^A-Za-z0-9._:-]", "_", mid)
+        if mid in seen or any(fnmatch.fnmatchcase(mid, h) for h in hide):
+            return
+        seen.add(mid)
+        c = conf_for(cp, mid)
+        mmproj = os.path.expanduser(c["mmproj"]) if c.get("mmproj") else mmproj_default
+        models.append({
+            "id": mid, "path": path,
+            "label": c.get("label") or label_default or QUANT_RE.sub("", stem),
+            "tag": c.get("tag", ""), "ctx": int(c.get("ctx", DEFAULT_CTX)),
+            "note": c.get("note", ""), "args": c.get("args", DEFAULT_ARGS),
+            "extra": c.get("extra", ""), "mmproj": mmproj,
+        })
+
+    for root in DIRS:
+        root = os.path.expanduser(root)
+        if not os.path.isdir(root):
+            continue
+        if os.path.isdir(os.path.join(root, "manifests")):      # Ollama store
+            for name, path, proj in ollama_models(root):
+                add(name, name, path, root, proj, label_default=name)
+            continue
+        for dp, _, files in os.walk(root, followlinks=True):
+            for f in sorted(files):
+                if not f.endswith(".gguf") or f.startswith("mmproj"):
+                    continue
+                stem = f[:-5]
+                m = SHARD_RE.search(stem)
+                if m:
+                    if m.group(1) != "00001":
+                        continue
+                    stem = stem[:m.start()]
+                mmproj = next((os.path.join(dp, g) for g in sorted(os.listdir(dp))
+                               if g.startswith("mmproj") and g.endswith(".gguf")), "")
+                add(stem, stem, os.path.join(dp, f), dp, mmproj)
+    models.sort(key=lambda m: m["label"].lower())
+    default = cp.get("defaults", "default", fallback="")
+    if default:
+        models.sort(key=lambda m: 0 if fnmatch.fnmatchcase(m["id"], default) else 1)
+    return models
+
+
+def find(models, key):
+    for m in models:
+        if m["id"] == key or m["label"] == key:
+            return m
+    hits = [m for m in models if fnmatch.fnmatchcase(m["id"], key) or key.lower() in m["id"].lower()]
+    if len(hits) == 1:
+        return hits[0]
+    sys.exit(f"modelctl: {'ambiguous' if hits else 'unknown'} model '{key}'"
+             + (": " + ", ".join(h["id"] for h in hits) if hits else " (see: modelctl list)"))
+
+
+def cmdline(m):
+    cmd = ["llama-server", "-m", m["path"], "-c", str(m["ctx"]), "-a", m["label"],
+           "--host", "127.0.0.1", "--port", PORT] + shlex.split(m["args"]) + shlex.split(m["extra"])
+    if m["mmproj"]:
+        cmd += ["--mmproj", m["mmproj"]]
+    return cmd
+
+
+def main(argv):
+    cp = load_conf()
+    cmd = argv[0] if argv else "default"
+    if cmd == "image":
+        sd = os.environ.get("MODELCTL_SD_DIR", cp.get("defaults", "sd_dir", fallback=f"{HOME}/.local/share/stable-diffusion/models"))
+        ck = cp.get("defaults", "sd_server_model", fallback="sd_turbo.safetensors")
+        os.execvp("sd-server", ["sd-server", "-m", os.path.join(os.path.expanduser(sd), ck), "--type", "f16",
+                                "--listen-ip", "127.0.0.1", "--listen-port", os.environ.get("MODELCTL_SD_PORT", "8091")] + argv[1:])
+    models = discover(cp)
+    if cmd == "list":
+        if not models:
+            sys.exit("modelctl: no .gguf files under " + ":".join(DIRS) + " (set MODELCTL_MODEL_DIRS)")
+        if "--tsv" in argv:
+            for m in models:
+                print("\t".join([m["id"], m["label"], m["tag"], str(m["ctx"]), m["note"], m["path"],
+                                 "1" if m["mmproj"] else "0"]))
+            return
+        print(f"{'ID':40} {'CTX':>7}  {'VIS':3} NOTE")
+        for m in models:
+            print(f"{m['id']:40} {m['ctx']:>7}  {'yes' if m['mmproj'] else '':3} {m['note']}")
+        print(f"\nconfig: {CONF}   port: {PORT}   dirs: {':'.join(DIRS)}")
+        return
+    if cmd in ("-h", "--help", "help"):
+        print(__doc__.strip()); return
+    if cmd == "show":
+        print(shlex.join(cmdline(models[0] if argv[1:2] in ([], ["default"]) else find(models, argv[1]))))
+        return
+    if not models:
+        sys.exit("modelctl: no models found (see: modelctl list)")
+    m = models[0] if cmd == "default" else find(models, cmd)
+    if not os.path.exists(m["path"]):
+        sys.exit(f"modelctl: {m['path']} vanished — is the model partition mounted?")
+    c = cmdline(m) + argv[1:]
+    print("modelctl:", shlex.join(c), file=sys.stderr, flush=True)
+    os.execvp(c[0], c)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

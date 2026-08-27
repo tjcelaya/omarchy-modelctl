@@ -47,16 +47,19 @@ Item {
   implicitWidth: vertical ? 28 : row.implicitWidth + 16
   implicitHeight: bar ? bar.barSize : 26
 
-  // Bar stays glanceable: icon + short tag. Full names live in the popup.
+  // Bar stays glanceable: icon + short tag. models.conf `tag=` wins; otherwise
+  // derive one: initials of the words before the size marker + the size digits
+  // (gpt-oss-20b -> go20, qwen3-coder-30b-a3b -> qc30, llama3.2:3b -> l3).
+  property string modelTag: ""
   function abbrev(id) {
+    if (root.modelTag) return root.modelTag
     if (!id) return ""
-    var m = String(id).toLowerCase()
-    if (m.indexOf("gpt-oss") === 0)  return "oss20"
-    if (m.indexOf("qwen3-coder") === 0) return "qc30"
-    if (m.indexOf("gemma") === 0)    return "g12"
-    if (m.indexOf("qwen3-4b") === 0) return "q4"
-    if (m.indexOf("glm") === 0)      return "glm"
-    return m.replace(/[^a-z0-9]/g, "").slice(0, 5)
+    var words = String(id).toLowerCase().split(/[-_:\/\s]+/).filter(function(w) { return w })
+    var size = -1
+    for (var i = 0; i < words.length; i++) if (/^\d+(\.\d+)?b$/.test(words[i])) { size = i; break }
+    if (size < 0) return words.join("").replace(/[^a-z0-9]/g, "").slice(0, 5)
+    var init = words.slice(0, size).map(function(w) { return w[0] }).join("").slice(0, 3)
+    return init + words[size].replace(/\.\d+b$|b$/, "")
   }
   function sdAbbrev(id) {
     return ({turbo: "turbo", sd15: "sd15", sdxl: "sdxl", zimage: "zimg", flux: "flux", chroma: "chrm"})[id] || id
@@ -79,6 +82,7 @@ Item {
           var d = JSON.parse(this.text)
           root.state   = d.state || "off"
           root.model   = d.model || ""
+          root.modelTag = d.tag || ""
           root.freeMem = d.free  || ""
           root.unit    = d.unit  || ""
           root.agents  = d.agents || []

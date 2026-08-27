@@ -88,14 +88,40 @@ the manifest; `bin/modelctl-check` checks the bar and menu agree with herdr.
 
 ## Usage
 
-    modelctl              # default model, foreground
-    modelctl vision       # a different mode
-    modelctl list         # modes with measured context + free memory
-    systemctl --user start modelctl@vision
+    modelctl list                 # every GGUF found, with the context each will get
+    modelctl                      # start the default model in the foreground
+    modelctl <id>                 # start a specific one (id = filename minus .gguf, or ollama name:tag)
+    modelctl show <id>            # print the llama-server command line, don't run it
+    systemctl --user start modelctl@<id>
 
-`bin/modelctl` is where model paths and context sizes live. **They are tuned for one
-machine** (Radeon 760M, 23.5 GiB Vulkan pool) — re-derive them for yours; see
-`TUNING.md`.
+### Where models come from
+
+Nothing is hardcoded. `modelctl` scans `MODELCTL_MODEL_DIRS` (default
+`~/.lmstudio/models`, `~/.cache/llama.cpp`, `~/models`, `~/.ollama/models`) for
+`*.gguf`, following symlinks — so **LM Studio** downloads are picked up as-is, and an
+**Ollama** store is read through its manifests and each pulled `name:tag` is served
+straight from its GGUF blob (Ollama does not need to be running). `mmproj-*.gguf`
+projectors are attached automatically, sharded models start from shard 1, and the
+menu regenerates from the scan every time it opens.
+
+### Tuning: `~/.config/modelctl/models.conf`
+
+Machine- and model-specific settings live here, not in code (created from
+`models.conf.example` by `install.sh`). Sections are globs over model ids:
+
+    [defaults]
+    default = gpt-oss-20b*
+    args = -ngl 99 -fa on -ctk q8_0 -ctv q8_0 -np 1 --cache-reuse 256 --jinja
+
+    [gpt-oss-20b*]
+    ctx = 131072
+    label = gpt-oss-20b        # the alias llama-server reports; match it in opencode
+    tag = oss20                # what the bar shows
+    note = fastest here
+
+Without a section a model gets 16k context and the stock flags. The values in the
+example file were measured on one machine (Radeon 760M, 23.5 GiB Vulkan pool) —
+`TUNING.md` explains how they were derived so you can redo it for yours.
 
 ## Settings
 
@@ -115,9 +141,8 @@ Exposed through the plugin manifest, editable in Omarchy's settings UI:
 **v0.1.0, works on one machine.** The QML widget is new and less battle-tested than
 the shell scripts behind it. Known gaps:
 
-- Model list in `bin/modelctl` is hardcoded, not discovered from disk.
-- Context sizes are measured values for a specific GPU, not computed from free VRAM.
-- Only herdr-managed agents are listed; anything started outside herdr is invisible.
+- Context sizes come from `models.conf` (16k default), not computed from free VRAM.
+- Only herdr-managed agents are listed; plain tmux panes are a planned addition.
 - The dropdown still uses Omarchy's menu via a generated JSONC file, because the
   menu's `provider` mechanism is a closed set hardcoded in `Menu.qml`. A native
   popup panel would remove that.

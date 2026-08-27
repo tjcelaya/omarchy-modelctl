@@ -8,34 +8,7 @@
     "description": "Load a local GGUF model for opencode"
   },
 
-  "modelctl.default": {
-    "icon": "",
-    "label": "gpt-oss-20b",
-    "description": "131k ctx · fastest · the default · 13.7 GiB free",
-    "action": "@BIN@/modelctl-switch default",
-    "checked": "systemctl --user is-active --quiet modelctl@default.service || systemctl --user is-active --quiet modelctl.service"
-  },
-  "modelctl.big": {
-    "icon": "",
-    "label": "qwen3-coder-30b",
-    "description": "16k ctx · 2.5x slower · batch coding only · 8.7 GiB free",
-    "action": "@BIN@/modelctl-switch big",
-    "checked": "systemctl --user is-active --quiet modelctl@big.service"
-  },
-  "modelctl.vision": {
-    "icon": "",
-    "label": "gemma-4-12B · vision",
-    "description": "16k ctx · accepts images · ~35s per image query",
-    "action": "@BIN@/modelctl-switch vision",
-    "checked": "systemctl --user is-active --quiet modelctl@vision.service"
-  },
-  "modelctl.fast": {
-    "icon": "",
-    "label": "qwen3-4b",
-    "description": "32k ctx · 29 tok/s · quick chat / smoke test",
-    "action": "@BIN@/modelctl-switch fast",
-    "checked": "systemctl --user is-active --quiet modelctl@fast.service"
-  },
+  // @MODEL_ROWS@
   // @IMAGE_SECTION@
   "modelctl.sep": {
     "icon": "",
@@ -55,6 +28,7 @@
     "icon": "",
     "label": "Open LM Studio",
     "description": "Browse and download GGUF models",
-    "action": "uwsm-app -- lm-studio"
+    "action": "uwsm-app -- lm-studio",
+    "when": "command -v lm-studio"
   }
 }

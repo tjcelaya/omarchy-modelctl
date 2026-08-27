@@ -11,8 +11,11 @@ mkdir -p ~/.config/systemd/user ~/.local/bin
 ln -sf "$SRC/bin/modelctl" ~/.local/bin/modelctl
 for u in "$SRC"/systemd/*.service; do ln -sf "$u" ~/.config/systemd/user/"$(basename "$u")"; done
 systemctl --user daemon-reload
+mkdir -p ~/.config/modelctl
+[ -e ~/.config/modelctl/models.conf ] || cp "$SRC/models.conf.example" ~/.config/modelctl/models.conf
 "$SRC/bin/modelctl-menu-sync" --force || true
 echo "modelctl wired. If the widget is not on the bar yet:"
 echo "  omarchy plugin enable tjcelaya.modelctl"
 echo "  omarchy bar move tjcelaya.modelctl --section center"
-echo "Edit bin/modelctl to point at your GGUF/SD files (see README)."
+echo "Models are discovered from ~/.lmstudio/models, ~/.ollama/models, ~/models, ~/.cache/llama.cpp"
+echo "(MODELCTL_MODEL_DIRS). Tune per-model context etc. in ~/.config/modelctl/models.conf."

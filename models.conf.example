@@ -1,0 +1,47 @@
+# ~/.config/modelctl/models.conf — everything machine- or model-specific for modelctl.
+# Models themselves are discovered from disk (MODELCTL_MODEL_DIRS); this file only
+# tunes them. Section names are globs matched against the model id (the GGUF
+# filename without .gguf); later matching sections override earlier ones.
+#
+# Keys:  ctx    context size passed as -c (default 16384)
+#        args   the full llama-server flag set (replaces the default:
+#               "-ngl 99 -fa on -np 1 --cache-reuse 256 --jinja")
+#        extra  flags appended to args (use this for per-model additions)
+#        label  the alias llama-server reports (-a); default = id minus quant suffix.
+#               opencode's model list must match this.
+#        tag    ≤5-char text shown next to the bar icon (default: derived from label)
+#        note   one line for the menu description / `modelctl list`
+#        mmproj vision projector path (default: an mmproj-*.gguf in the same folder)
+
+[defaults]
+default = gpt-oss-20b*
+# hide = Qwen2.5-0.5B* *test*
+# Measured on a Radeon 760M with a 23.5 GiB Vulkan pool (see TUNING.md): q8 KV cache
+# lets a 20B model run at full 131k context. Drop -ctk/-ctv on a dGPU with room.
+args = -ngl 99 -fa on -ctk q8_0 -ctv q8_0 -np 1 --cache-reuse 256 --jinja
+sd_dir = ~/.local/share/stable-diffusion/models
+sd_server_model = sd_turbo.safetensors
+
+[gpt-oss-20b*]
+ctx = 131072
+label = gpt-oss-20b
+tag = oss20
+note = fastest here · 13.7 GiB OS free
+
+[Qwen3-Coder-30B*]
+ctx = 16384
+label = qwen3-coder-30b
+tag = qc30
+note = 2.5x slower prefill · 8.7 GiB free
+
+[gemma-4-12B-it-QAT*]
+ctx = 16384
+label = gemma-4-12b
+tag = g12
+note = ~35s per image query
+
+[Qwen3-4B*]
+ctx = 32768
+label = qwen3-4b
+tag = q4
+note = 29 tok/s · quick chat

@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
-# Switch the resident model. Only one fits — the Vulkan pool is 23552 MiB.
+# Switch the resident model: stop whatever modelctl@ unit is running, start this one.
+# Usage: modelctl-switch <model-id>   (ids: modelctl list)
 set -u
-MODE="${1:-default}"
+D="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+ID="${1:?model id}"
 for u in modelctl.service $(systemctl --user list-units --plain --no-legend 'modelctl@*.service' 2>/dev/null | awk '{print $1}'); do
   systemctl --user stop "$u" 2>/dev/null
 done
-# The alias llama-server reports; opencode must be pointed at the SAME id or its
-# context limit goes stale (it ignores the model field in the request).
-case "$MODE" in
-  default) ALIAS=gpt-oss-20b ;;  big) ALIAS=qwen3-coder-30b ;;
-  vision)  ALIAS=gemma-4-12b ;;  fast) ALIAS=qwen3-4b ;;  *) ALIAS="$MODE" ;;
-esac
-notify-send -a modelctl -i computer "Loading ${MODE}…" \
-  "Cold start ~35s.\nIn opencode: /models -> ${ALIAS}"
-systemctl --user start "modelctl@${MODE}.service"
+# The alias llama-server reports (-a). A client that caches per-model limits
+# (opencode ignores the request's model field) must be pointed at the same name.
+ALIAS=$("$D/modelctl" list --tsv 2>/dev/null | awk -F'\t' -v id="$ID" '$1==id{print $2}')
+notify-send -a modelctl -i computer "Loading ${ALIAS:-$ID}…" "Cold start can take a while.\nIn opencode: /models -> ${ALIAS:-$ID}"
+systemctl --user start "modelctl@${ID}.service"
