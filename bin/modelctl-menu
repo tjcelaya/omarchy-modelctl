@@ -2,7 +2,7 @@
 # Open the model menu, guaranteeing its agent rows match herdr at the moment of
 # opening. The 5s bar poll keeps the badge live; this closes the gap for the menu.
 set -u
-D="$HOME/src/omarchy-modelctl/bin"
+D="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 "$D/modelctl-menu-sync" --force >/dev/null 2>&1
 # `modelctl-menu agents` jumps straight to the agents submenu.
 exec omarchy menu summon "modelctl${1:+.$1}"

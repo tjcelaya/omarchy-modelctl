@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Install modelctl: plugin -> ~/.config/omarchy/plugins/tjcelaya.modelctl
-#                   scripts -> ~/.config/omarchy/bar/scripts
-#                   units   -> ~/.config/systemd/user
-# Symlinks, so `git pull` here updates everything in place.
+# Post-install for modelctl. The bar widget itself is loaded by Omarchy straight
+# from this folder; this only wires the parts that live outside it:
+#   ~/.local/bin/modelctl            launcher on PATH (used by the systemd units)
+#   ~/.config/systemd/user/modelctl* on-demand llama-server / sd-server units
+# Everything is a symlink into this folder, so `omarchy plugin update` updates it all.
+# Nothing is enabled at boot; units start only when you pick a model in the menu.
 set -euo pipefail
-SRC="$(cd "$(dirname "$0")" && pwd)"
-mkdir -p ~/.config/omarchy/plugins ~/.config/omarchy/bar/scripts ~/.config/systemd/user ~/.local/bin
-# A symlinked plugin DIRECTORY is registered but never hot-reloaded — the shell's
-# file watcher does not follow it. Real dir, symlinked files.
-mkdir -p ~/.config/omarchy/plugins/tjcelaya.modelctl
-for f in "$SRC"/plugin/*; do ln -sf "$f" ~/.config/omarchy/plugins/tjcelaya.modelctl/"$(basename "$f")"; done
-for f in "$SRC"/bin/modelctl-*; do ln -sf "$f" ~/.config/omarchy/bar/scripts/"$(basename "$f")"; done
+SRC="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+mkdir -p ~/.config/systemd/user ~/.local/bin
 ln -sf "$SRC/bin/modelctl" ~/.local/bin/modelctl
-for u in "$SRC"/systemd/*.service; do [ -e "$u" ] && ln -sf "$u" ~/.config/systemd/user/"$(basename "$u")"; done
+for u in "$SRC"/systemd/*.service; do ln -sf "$u" ~/.config/systemd/user/"$(basename "$u")"; done
 systemctl --user daemon-reload
-echo "installed. enable the widget with:  omarchy plugin enable tjcelaya.modelctl"
-echo "then place it:                      omarchy bar move tjcelaya.modelctl --section center"
+"$SRC/bin/modelctl-menu-sync" --force || true
+echo "modelctl wired. If the widget is not on the bar yet:"
+echo "  omarchy plugin enable tjcelaya.modelctl"
+echo "  omarchy bar move tjcelaya.modelctl --section center"
+echo "Edit bin/modelctl to point at your GGUF/SD files (see README)."

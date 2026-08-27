@@ -1,7 +1,9 @@
 # modelctl
 
 An Omarchy bar plugin for running local LLMs with llama.cpp, and for seeing every
-running [herdr](https://github.com/) coding agent at a glance.
+running [herdr](https://github.com/tjcelaya/herdr) coding agent at a glance.
+
+![modelctl in the Omarchy bar and its menu](preview.png)
 
     󰚩oss20  󰋩  󱃒2
 
@@ -46,19 +48,43 @@ subscription usage rather than running sessions.
 
 ## Install
 
-    git clone <this repo> ~/src/omarchy-modelctl
-    ~/src/omarchy-modelctl/install.sh
-    omarchy plugin enable tjcelaya.modelctl
-    omarchy bar move tjcelaya.modelctl --section center
+    omarchy plugin add https://github.com/tjcelaya/omarchy-modelctl.git --enable
+    ~/.config/omarchy/plugins/tjcelaya.modelctl/install.sh
 
-Everything is symlinked, so `git pull` updates in place.
+`omarchy plugin add` clones this repo into `~/.config/omarchy/plugins/tjcelaya.modelctl`
+and loads the bar widget from there. `install.sh` wires the two things that have to
+live outside the plugin folder — a `modelctl` launcher on `PATH` and the on-demand
+systemd user units — as symlinks back into it, so `omarchy plugin update` updates
+everything. Nothing is enabled at boot: a server starts only when you pick a model.
+
+If the widget is not on the bar: `omarchy plugin enable tjcelaya.modelctl`, then
+`omarchy bar move tjcelaya.modelctl --section center`.
+
+### Uninstall
+
+    ~/.config/omarchy/plugins/tjcelaya.modelctl/uninstall.sh
+    omarchy plugin remove tjcelaya.modelctl
+
+`uninstall.sh` stops any running server, removes the units, the `PATH` symlink,
+modelctl's state and **only its own** `modelctl.*` entries in
+`~/.config/omarchy/extensions/omarchy-menu.jsonc` (other entries in that file are
+kept, both on install and on removal).
+
+### Developing
+
+Symlink the checkout as the plugin folder and restart the shell after QML edits
+(a symlinked folder is not hot-reloaded): `ln -s ~/src/omarchy-modelctl
+~/.config/omarchy/plugins/tjcelaya.modelctl`. `omarchy plugin validate .` checks
+the manifest; `bin/modelctl-check` checks the bar and menu agree with herdr.
 
 ## Requirements
 
-- `llama-cpp` + `ggml-vulkan` (or another ggml backend)
+- `llama-cpp` + `ggml-vulkan` (or another ggml backend) — `llama-server` on `PATH`
 - GGUF models under `~/.lmstudio/models/` (or set `MODELCTL_MODEL_DIR`)
+- `stable-diffusion.cpp` (`sd-cli`, `sd-server`) and checkpoints under
+  `MODELCTL_SD_DIR` — optional; only for the image button
 - `herdr` for the agent list — optional; without it the widget shows only the model
-- systemd user session
+- systemd user session; `python3`, `jq`, `curl`
 
 ## Usage
 
@@ -80,6 +106,9 @@ Exposed through the plugin manifest, editable in Omarchy's settings UI:
 | `refreshIntervalSec` | 5 | how often to re-read state |
 | `port` | 8090 | llama-server port |
 | `showCwd` | true | show each agent's working directory |
+| `imageDir` | `~/Pictures/generated` | where generated images are saved |
+| `modelIcon` | `󰚩` | glyph for the model tag (see `BarWidget.qml` for tested alternatives) |
+| `agentsIcon` | `󱃒` | glyph for the agents badge |
 
 ## Status
 

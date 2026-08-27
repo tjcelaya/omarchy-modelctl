@@ -66,7 +66,8 @@ Item {
     return tag ? icon + " <span style=\"font-size:" + root.textPx + "px\">" + tag + "</span>" : icon
   }
 
-  function scriptDir() { return Quickshell.env("HOME") + "/.config/omarchy/bar/scripts" }
+  // Scripts ship in bin/ next to this file, wherever the plugin folder lives.
+  function scriptDir() { return Qt.resolvedUrl("bin").toString().replace(/^file:\/\//, "") }
   function run(cmd) { if (bar && bar.run) bar.run(cmd) }
 
   Process {

@@ -2,7 +2,7 @@
 # Compact state for the QML bar module: loaded model + every herdr agent.
 set -u
 PORT="${MODELCTL_PORT:-8090}"
-D="$HOME/src/omarchy-modelctl/bin"
+D="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 
 active=""
 for u in modelctl.service $(systemctl --user list-units --plain --no-legend 'modelctl@*.service' 2>/dev/null | awk '{print $1}'); do

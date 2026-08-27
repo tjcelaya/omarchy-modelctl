@@ -1,6 +1,6 @@
 [Unit]
 Description=Local model server (default: gpt-oss-20b @131k)
-Documentation=file:///home/tj/src/local-ai-kit/MEASURED-framework13.md
+Documentation=https://github.com/tjcelaya/omarchy-modelctl
 After=graphical-session.target
 
 [Service]

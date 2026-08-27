@@ -3,7 +3,7 @@
 # Parses the CURRENT row format: label "name · shortcwd[ ●]",
 # description "cwd · status · pane".
 set -u
-D="$HOME/src/omarchy-modelctl/bin"
+D="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 a=$("$D/modelctl-agents" | awk -F'\t' '{print $1"|"$2"|"$3"|"$5}' | sort)
 b=$(python3 -c "
 import json,re,os

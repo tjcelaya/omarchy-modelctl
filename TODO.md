@@ -7,7 +7,8 @@ below can be filed as an issue, create the remote:
 
     gh repo create omarchy-modelctl --public --source=. --remote=origin --push
 
-Then mirror these as **Linear tickets and/or GitHub issues**.
+Then submit to the marketplace (see PUBLISHING.md) and mirror the issue below as a
+**Linear ticket and/or GitHub issue** on Omarchy.
 
 ---
 

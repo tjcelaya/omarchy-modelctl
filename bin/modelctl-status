@@ -2,7 +2,7 @@
 # Bar status for the local model server.
 # Deliberately separate from omarchy.agents, which tracks Claude subscription usage.
 PORT="${MODELCTL_PORT:-8090}"
-D="$HOME/src/omarchy-modelctl/bin"
+D="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 # Keep the menu's agent rows in step. No-ops unless the agent set changed.
 "$D/modelctl-menu-sync" >/dev/null 2>&1 &
 NAGENTS=$("$D/modelctl-agents" 2>/dev/null | grep -c . || echo 0)
