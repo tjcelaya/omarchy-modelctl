@@ -7,8 +7,9 @@ running [herdr](https://github.com/) coding agent at a glance.
 
 - **Model** (`󰚩` + abbreviation) — left-click for the model menu, middle-click stops
   the server, right-click tails its journal.
-- **Images** (`󰋩`) — left-click generates one image with SD-Turbo (~9 s, 512x512);
-  right-click toggles a resident `sd-server` on :8091. Dim = one-shot, bright = resident.
+- **Images** (`󰋩`) — left-click generates one image with the model selected in the
+  menu's `stable-diffusion` section; right-click toggles a resident SD-Turbo
+  `sd-server` on :8091. Dim = one-shot, bright = resident.
 - **Agents** (`󱃒` + count) — click for the menu, which lists every running herdr
   agent with its cwd and status. Selecting one focuses its pane.
 
@@ -20,8 +21,23 @@ Prompts via Omarchy's native input popup, saves to `~/Pictures/generated` as
 `<timestamp>-<prompt-slug>.png`, then opens it. Override the folder with
 `MODELCTL_IMAGE_DIR` or the `imageDir` setting; `SD_STEPS`, `SD_W`, `SD_H` tune the rest.
 
-Measured on this machine: SD-Turbo costs ~4.5 GiB and **coexists with gpt-oss-20b**
-(19,215 MiB peak of a 23,552 MiB pool), so you do not have to unload the LLM.
+Models (`modelctl-image --list`; pick in the menu or `modelctl-image --<id> "prompt"`).
+Measured 2026-08-26 at native res on the 23,552 MiB pool, `--vae-tiling` on:
+
+| id | model | res | steps | wall | peak GPU | beside gpt-oss-20b (~14.4 GiB)? |
+|---|---|---|---|---|---|---|
+| `turbo` | SD-Turbo | 512² | 4 | ~9 s | ~4.5 GiB | yes |
+| `sd15` | SD 1.5 | 512² | 20 | ~32 s | ~4 GiB | yes |
+| `sdxl` | SDXL-Lightning 4-step | 1024² | 4 | ~36 s | 7.6 GiB | yes |
+| `zimage` | Z-Image-Turbo Q8 + Qwen3-4B TE | 1024² | 8 | ~3m20 | 11.6 GiB | no — fits beside `fast` |
+| `flux` | Flux.1-schnell Q8 | 1024² | 4 | ~2m30 | 18.6 GiB | no |
+| `chroma` | Chroma1-HD Q8 | 1024² | 20 | ~22 min | 15.6 GiB | no |
+
+Models marked `⏏` in the menu (`flux`, `chroma`) stop whatever `modelctl@*` LLM unit is
+running for the duration and start it again afterwards (verified: gpt-oss-20b back and
+active after a Flux run, 2m35 total). `zimage` is not parked automatically — with
+gpt-oss-20b loaded it will overflow the pool; switch to `fast` or stop the LLM first.
+Checkpoints live in `$MODELCTL_SD_DIR` (default `/mnt/data/stable-diffusion-models`).
 
 Deliberately separate from Omarchy's built-in `omarchy.agents`, which reports Claude
 subscription usage rather than running sessions.

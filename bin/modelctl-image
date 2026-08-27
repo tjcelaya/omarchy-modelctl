@@ -1,25 +1,36 @@
 #!/usr/bin/env bash
-# One-shot image generation with SD-Turbo. Loads and exits, so it never holds the
+# One-shot image generation (SD-Turbo/1.5, SDXL-Lightning, Z-Image, Flux, Chroma). Loads and exits, so it never holds the
 # GPU pool. Uses Omarchy's native input popup — gum in a floating terminal never
 # reliably got keyboard focus.
 set -uo pipefail
 SD="${MODELCTL_SD_DIR:-/mnt/data/stable-diffusion-models}"
 
-# Model choice. SD-Turbo is the default: 4 steps, ~9s, cfg must be 1.0.
-# SD 1.5 is slower (20 steps) but takes real guidance, so prompts steer harder.
-#   modelctl-image --sd15 "a prompt"     or   MODELCTL_SD_MODEL=sd15
+# Model table: id | label | description | big(1=needs LLM unloaded) | steps | cfg | res | sd-cli args
+# Peak GPU MiB measured 2026-08-26 at native res with --vae-tiling (23.5 GiB pool):
+# turbo/sd15 <5G, sdxl 7.6G, zimage 11.6G, flux 18.6G, chroma 15.6G.
+models() { cat <<EOF
+turbo|· Turbo|512² · 4 steps · ~9s · drafts|0|4|1.0|512|-m $SD/sd_turbo.safetensors --type f16
+sd15|· SD 1.5|512² · 20 steps · ~32s · steers harder|0|20|7.0|512|-m $SD/v1-5-pruned-emaonly-fp16.safetensors --type f16
+sdxl|· SDXL-Lightning|1024² · 4 steps · ~36s · fits beside LLM|0|4|1.0|1024|-m $SD/sdxl_lightning_4step.safetensors --vae $SD/sdxl_vae_fp16_fix.safetensors --sampling-method euler --scheduler sgm_uniform --diffusion-fa --vae-tiling
+zimage|· Z-Image-Turbo|1024² · 8 steps · ~3m20 · best quality/size|0|8|1.0|1024|--diffusion-model $SD/z_image_turbo-Q8_0.gguf --vae $SD/flux_ae.safetensors --llm $SD/Qwen3-4B-Instruct-2507-Q8_0.gguf --diffusion-fa --vae-tiling
+flux|· Flux.1-schnell|1024² · 4 steps · ~2m30 · unloads LLM|1|4|1.0|1024|--diffusion-model $SD/flux1-schnell-Q8_0.gguf --vae $SD/flux_ae.safetensors --clip_l $SD/clip_l.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --diffusion-fa --vae-tiling
+chroma|· Chroma1-HD|1024² · 20 steps · ~22m · unloads LLM|1|20|4.0|1024|--diffusion-model $SD/Chroma1-HD-Q8_0.gguf --vae $SD/flux_ae.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --sampling-method euler --diffusion-fa --vae-tiling
+EOF
+}
+if [ "${1:-}" = --list ]; then models | cut -d'|' -f1-4; exit 0; fi
+
 SEL=$(cat "$HOME/.local/state/modelctl/sd-model" 2>/dev/null || echo turbo)
 MODEL="${MODELCTL_SD_MODEL:-$SEL}"
 case "${1:-}" in
-  --sd15|--sd)    MODEL=sd15;  shift ;;
-  --turbo)        MODEL=turbo; shift ;;
+  --sd15|--sd) MODEL=sd15; shift ;;
+  --turbo)     MODEL=turbo; shift ;;
+  --model)     MODEL="$2"; shift 2 ;;
+  --*)         MODEL="${1#--}"; shift ;;
 esac
-case "$MODEL" in
-  sd15) CKPT="$SD/v1-5-pruned-emaonly-fp16.safetensors"
-        DEF_STEPS=20; DEF_CFG=7.0 ;;
-  *)    CKPT="$SD/sd_turbo.safetensors"
-        DEF_STEPS=4;  DEF_CFG=1.0 ;;   # Turbo is distilled; guidance above 1 degrades it
-esac
+row=$(models | grep "^$MODEL|") || { notify-send -a modelctl -u critical "Unknown image model" "$MODEL"; exit 1; }
+IFS='|' read -r _ _ _ BIG DEF_STEPS DEF_CFG DEF_RES ARGS <<<"$row"
+# First path-ish token is the checkpoint; check it exists so failures are loud.
+CKPT=$(printf '%s\n' $ARGS | grep -m1 "^$SD/")
 [ -f "$CKPT" ] || { notify-send -a modelctl -u critical "Missing checkpoint" "$CKPT"; exit 1; }
 # Where images land. Override per-invocation, or set MODELCTL_IMAGE_DIR in the
 # environment / the plugin's imageDir setting for a permanent change.
@@ -36,11 +47,23 @@ prompt="$(printf '%s' "$prompt" | tr -d '\r\n')"
 slug=$(printf '%s' "$prompt" | tr -cs '[:alnum:]' '-' | cut -c1-40 | sed 's/^-//;s/-$//')
 f="$OUT/$(date +%Y%m%d-%H%M%S)-${MODEL}-${slug:-image}.png"
 
+# Big models need the whole GPU pool: park any running LLM unit and bring it back after.
+PARKED=""
+if [ "$BIG" = 1 ]; then
+  PARKED=$(systemctl --user list-units --plain --no-legend 'modelctl*.service' 2>/dev/null \
+           | awk '$4=="running"{print $1}' | grep -v '@image' | head -1)
+  if [ -n "$PARKED" ]; then
+    notify-send -a modelctl -i image "Unloading $PARKED" "$MODEL needs the whole GPU · it comes back after"
+    systemctl --user stop "$PARKED"
+  fi
+fi
 notify-send -a modelctl -i image "Generating ($MODEL)…" "$prompt"
-if sd-cli -m "$CKPT" --type f16 -p "$prompt" \
+sd-cli $ARGS -p "$prompt" \
      --steps "${SD_STEPS:-$DEF_STEPS}" --cfg-scale "${SD_CFG:-$DEF_CFG}" \
-     -W "${SD_W:-512}" -H "${SD_H:-512}" \
-     -o "$f" >/tmp/modelctl-image.log 2>&1 && [ -s "$f" ]; then
+     -W "${SD_W:-$DEF_RES}" -H "${SD_H:-$DEF_RES}" \
+     -o "$f" >/tmp/modelctl-image.log 2>&1; rc=$?
+[ -n "$PARKED" ] && systemctl --user start "$PARKED"
+if [ $rc = 0 ] && [ -s "$f" ]; then
   notify-send -a modelctl -i "$f" "Image ready" "$(basename "$f")"
   uwsm-app -- imv "$f" >/dev/null 2>&1 || xdg-open "$f" >/dev/null 2>&1 &
 else
