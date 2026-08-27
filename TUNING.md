@@ -221,7 +221,7 @@ Q1_0 is not obviously broken here, contrary to my first call.
 `max_tokens >= 1000` for any of them.
 
 **Choose on footprint/speed, not accuracy:** gemma-4 and GLM-4.6V are near-identical
-(~9.8 GiB, ~35 s); Bonsai is 2.7 GiB smaller but ~50% slower. `bin/modelctl vision` stays on
+(~9.8 GiB, ~35 s); Bonsai is 2.7 GiB smaller but ~50% slower. `gemma-4-12B-it-QAT` stays
 gemma-4 by default — an arbitrary tie-break between it and GLM-4.6V, not a measured win.
 
 **Method note:** one trial is not evidence. Vary the input rather than repeating at
