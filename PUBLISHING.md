@@ -11,8 +11,8 @@ out that way (v0.1.0+). Local checks that must pass before submitting:
 
 Manual steps (nothing here is automated on purpose):
 
-1. `gh repo create omarchy-modelctl --public --source=. --remote=origin --push`
-2. Add repo topics on GitHub: `omarchy`, `omarchy-plugin`, `llama-cpp`, `stable-diffusion`.
+1. ~~Create the repo~~ done: https://github.com/tjcelaya/omarchy-modelctl
+2. ~~Topics~~ done: `omarchy`, `omarchy-plugin`, `llama-cpp`, `stable-diffusion`.
 3. Tag the release: `git tag v0.1.0 && git push --tags` (bump `version` in
    `manifest.json` for every later release; `omarchy plugin update` pulls HEAD).
 4. Smoke-test the real install path on this machine:

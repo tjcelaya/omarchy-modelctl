@@ -1,14 +1,9 @@
 # TODO
 
-## Repo does not exist on GitHub yet
+## Published at https://github.com/tjcelaya/omarchy-modelctl (2026-08-27)
 
-This lives only at `~/src/omarchy-modelctl` with local commits. Before anything
-below can be filed as an issue, create the remote:
-
-    gh repo create omarchy-modelctl --public --source=. --remote=origin --push
-
-Then submit to the marketplace (see PUBLISHING.md) and mirror the issue below as a
-**Linear ticket and/or GitHub issue** on Omarchy.
+Remaining manual steps are in PUBLISHING.md (tag, marketplace submission). Mirror
+the issue below as a **Linear ticket and/or GitHub issue** on Omarchy.
 
 ---
 
