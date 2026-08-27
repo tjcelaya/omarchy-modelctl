@@ -24,6 +24,12 @@ Item {
   property var agents: []
   property bool imageOn: false
   property string sdModel: "turbo"
+  // Glyph settings (JetBrainsMono Nerd Font codepoints, verified to render 2026-08-27).
+  // modelIcon — something that isn't Omarchy's own agents robot:
+  //   󰧑 F09D1 brain      󰘚 F061A chip      󰻠 F0EE0 cpu-64-bit   󰍛 F035B memory   󰙴 F0674 sparkles
+  // agentsIcon — the default 󱃒 F10D2 is a crossed-out screen and reads badly small; try:
+  //   󰆍 F018D console    󰞷 F07B7 console-line (>_)    E795 dev-terminal
+  //   󱚝 F169D robot-happy   󱚞 F169E robot-happy-outline   󱚥 F16A5 robot-excited   󰭆 F0B46 robot-industrial
   readonly property string modelIcon:  (settings && settings.modelIcon) || "󰚩"
   readonly property string agentsIcon: (settings && settings.agentsIcon) || "󱃒"
   // Glyphs at the shell's icon size, tags at body size — matches first-party widgets.

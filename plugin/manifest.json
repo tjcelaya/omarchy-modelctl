@@ -60,13 +60,13 @@
       {
         "key": "agentsIcon",
         "type": "string",
-        "label": "Agents badge glyph (try 󰆍 󰞷 󰭹)",
+        "label": "Agents badge glyph (suggestions: 󰆍 console, 󰞷 >_, 󱚝 󱚞 robots)",
         "defaultValue": "󱃒"
       },
       {
         "key": "modelIcon",
         "type": "string",
-        "label": "Model glyph (try 󰧑 󰘚 󰻠 󰍛)",
+        "label": "Model glyph (suggestions: 󰧑 brain, 󰘚 chip, 󰻠 cpu, 󰍛 memory)",
         "defaultValue": "󰚩"
       }
     ]
