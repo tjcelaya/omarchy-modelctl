@@ -10,7 +10,7 @@ Item {
 
   // Injected by the bar host.
   property var bar
-  property string moduleName: "tj.modelctl"
+  property string moduleName: "tjcelaya.modelctl"
   property var settings: ({})
 
   readonly property int refreshSec: (settings && settings.refreshIntervalSec) || 5

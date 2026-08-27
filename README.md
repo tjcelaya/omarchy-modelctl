@@ -48,8 +48,8 @@ subscription usage rather than running sessions.
 
     git clone <this repo> ~/src/omarchy-modelctl
     ~/src/omarchy-modelctl/install.sh
-    omarchy plugin enable tj.modelctl
-    omarchy bar move tj.modelctl --section center
+    omarchy plugin enable tjcelaya.modelctl
+    omarchy bar move tjcelaya.modelctl --section center
 
 Everything is symlinked, so `git pull` updates in place.
 

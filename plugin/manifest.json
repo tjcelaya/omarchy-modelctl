@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "tj.modelctl",
+  "id": "tjcelaya.modelctl",
   "name": "modelctl",
   "version": "0.1.0",
-  "author": "tj",
+  "author": "tjcelaya",
   "license": "MIT",
   "description": "Local llama.cpp model server control plus live herdr agent list in the Omarchy bar.",
   "kinds": [
