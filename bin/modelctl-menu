@@ -4,4 +4,5 @@
 set -u
 D="$HOME/src/omarchy-modelctl/bin"
 "$D/modelctl-menu-sync" --force >/dev/null 2>&1
-exec omarchy menu summon modelctl
+# `modelctl-menu agents` jumps straight to the agents submenu.
+exec omarchy menu summon "modelctl${1:+.$1}"

@@ -22,7 +22,8 @@
       "refreshIntervalSec": 5,
       "port": 8090,
       "showCwd": true,
-      "imageDir": "~/Pictures/generated"
+      "imageDir": "~/Pictures/generated",
+      "agentsIcon": "󱃒"
     },
     "schema": [
       {
@@ -54,6 +55,12 @@
         "type": "string",
         "label": "Generated image folder",
         "defaultValue": "~/Pictures/generated"
+      },
+      {
+        "key": "agentsIcon",
+        "type": "string",
+        "label": "Agents badge glyph (try 󰆍 󰞷 󰭹)",
+        "defaultValue": "󱃒"
       }
     ]
   }

@@ -7,10 +7,11 @@ running [herdr](https://github.com/) coding agent at a glance.
 
 - **Model** (`󰚩` + abbreviation) — left-click for the model menu, middle-click stops
   the server, right-click tails its journal.
-- **Images** (`󰋩`) — left-click generates one image with the model selected in the
+- **Images** (`󰋩`) — left-click (tag = selected model) generates one image with the model selected in the
   menu's `stable-diffusion` section; right-click toggles a resident SD-Turbo
   `sd-server` on :8091. Dim = one-shot, bright = resident.
-- **Agents** (`󱃒` + count) — click for the menu, which lists every running herdr
+- **Agents** (`󱃒` + count; glyph via the `agentsIcon` setting) — click opens the
+  agents submenu directly, which lists every running herdr
   agent with its cwd and status. Selecting one focuses its pane.
 
 Names, paths and status live in the menu; the bar stays to icons and short tags.

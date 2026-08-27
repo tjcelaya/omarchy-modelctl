@@ -52,6 +52,8 @@ s=s.replace("// @IMAGE_SECTION@","\n".join(img))
 extra=[]
 if rows:
     extra.append('  "modelctl.agentsep": {"icon":"","label":"────────────────","description":"","action":"true"},')
+    # Own submenu so the bar's agent badge can summon it directly (`omarchy menu summon modelctl.agents`).
+    extra.append('  "modelctl.agents": {"icon":"󱃒","label":"Agents (%d)","description":"Running herdr agents · select one to focus its pane"},' % len(rows))
     for i,r in enumerate(rows):
         agent,cwd,status,focused,pane=(r+[""]*5)[:5]
         mark=" ●" if focused=="1" else ""
@@ -59,7 +61,7 @@ if rows:
         # The menu card is a hardcoded 300px, so long cwds truncate. Show the
         # last path segment; the full path stays in the description.
         short=cwd.rstrip("/").split("/")[-1] or cwd
-        extra.append('  "modelctl.agent%d": {"icon":"\U000f10d2","label":%s,"description":%s,"action":%s},'
+        extra.append('  "modelctl.agents.%d": {"icon":"\U000f10d2","label":%s,"description":%s,"action":%s},'
             % (i, j(f"{agent} · {short}{mark}"), j(f"{cwd} · {status} · {pane}"), j(f"herdr agent focus {pane}")))
 body=s.rstrip().rstrip("}").rstrip().rstrip(",")
 tail="\n".join(extra).rstrip(",")

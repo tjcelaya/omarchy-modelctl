@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.Commons
 
 // modelctl — loaded local model + one entry per running herdr agent.
 // Deliberately distinct from omarchy.agents, which reports Claude subscription usage.
@@ -22,6 +23,11 @@ Item {
   property string unit: ""
   property var agents: []
   property bool imageOn: false
+  property string sdModel: "turbo"
+  readonly property string agentsIcon: (settings && settings.agentsIcon) || "󱃒"
+  // Glyphs at the shell's icon size, tags at body size — matches first-party widgets.
+  readonly property int iconPx: Style.font.icon
+  readonly property int textPx: Style.font.body
 
   readonly property color fg:     bar ? bar.foreground : "white"
   readonly property string fam:   bar ? bar.fontFamily : "monospace"
@@ -45,6 +51,13 @@ Item {
     if (m.indexOf("glm") === 0)      return "glm"
     return m.replace(/[^a-z0-9]/g, "").slice(0, 5)
   }
+  function sdAbbrev(id) {
+    return ({turbo: "turbo", sd15: "sd15", sdxl: "sdxl", zimage: "zimg", flux: "flux", chroma: "chrm"})[id] || id
+  }
+  // Icon and tag as one Text with a smaller-font span, so they sit on one baseline.
+  function tagged(icon, tag) {
+    return tag ? icon + " <span style=\"font-size:" + root.textPx + "px\">" + tag + "</span>" : icon
+  }
 
   function scriptDir() { return Quickshell.env("HOME") + "/.config/omarchy/bar/scripts" }
   function run(cmd) { if (bar && bar.run) bar.run(cmd) }
@@ -62,6 +75,7 @@ Item {
           root.unit    = d.unit  || ""
           root.agents  = d.agents || []
           root.imageOn = d.image === true
+          root.sdModel = d.sd || "turbo"
         } catch (e) {
           // Leave the last good reading in place rather than blanking the bar.
         }
@@ -85,11 +99,12 @@ Item {
     Text {
       anchors.verticalCenter: parent.verticalCenter
       font.family: root.fam
-      font.pixelSize: 12
+      font.pixelSize: root.iconPx
+      textFormat: Text.RichText
       color: root.fg
       opacity: root.state === "ready" ? 1.0 : 0.55
-      text: "󰚩" + (root.state === "ready" ? " " + root.abbrev(root.model)
-                  : root.state === "loading" ? " ···" : "")
+      text: root.tagged("󰚩", root.state === "ready" ? root.abbrev(root.model)
+                              : root.state === "loading" ? "···" : "")
       MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
@@ -105,11 +120,12 @@ Item {
     Text {
       anchors.verticalCenter: parent.verticalCenter
       font.family: root.fam
-      font.pixelSize: 12
+      font.pixelSize: root.iconPx
+      textFormat: Text.RichText
       color: root.fg
       // Bright when the SD server is resident, dim when it is a one-shot launcher.
-      opacity: root.imageOn ? 1.0 : 0.45
-      text: "󰋩"
+      opacity: root.imageOn ? 1.0 : 0.6
+      text: root.tagged("󰋩", root.sdAbbrev(root.sdModel))
       MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -128,13 +144,14 @@ Item {
       anchors.verticalCenter: parent.verticalCenter
       visible: root.agents.length > 0
       font.family: root.fam
-      font.pixelSize: 12
+      font.pixelSize: root.iconPx
+      textFormat: Text.RichText
       color: root.fg
       opacity: root.anyWorking ? 0.95 : 0.6
-      text: "󱃒" + root.agents.length
+      text: root.tagged(root.agentsIcon, String(root.agents.length))
       MouseArea {
         anchors.fill: parent
-        onClicked: root.run(root.scriptDir() + "/modelctl-menu")
+        onClicked: root.run(root.scriptDir() + "/modelctl-menu agents")
       }
     }
   }
@@ -143,7 +160,7 @@ Item {
   Text {
     anchors.centerIn: parent
     visible: root.vertical
-    font.family: root.fam; font.pixelSize: 12
+    font.family: root.fam; font.pixelSize: root.iconPx
     color: root.fg
     text: "󰚩"
     MouseArea { anchors.fill: parent; onClicked: root.run(root.scriptDir() + "/modelctl-menu") }
