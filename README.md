@@ -37,7 +37,7 @@ Before generating, the script reads the amdgpu memory counters; if the model's m
 peak would not fit next to what is loaded, it stops the running `modelctl@*` LLM unit
 and starts it again afterwards (verified: gpt-oss-20b active again after a Flux run,
 2m35 total). So `zimage` runs beside `fast` untouched but parks `default`; `flux` and
-`chroma` (`⏏` in the menu) park anything.
+`chroma` (`(!)` in the menu) park anything.
 Checkpoints live in `$MODELCTL_SD_DIR` (default `/mnt/data/stable-diffusion-models`).
 
 Deliberately separate from Omarchy's built-in `omarchy.agents`, which reports Claude
