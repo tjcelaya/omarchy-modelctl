@@ -4,7 +4,7 @@
 # description "cwd · status · pane".
 set -u
 D="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-a=$("$D/modelctl-agents" | awk -F'\t' '{print $1"|"$2"|"$3"|"$5}' | sort)
+a=$("$D/modelctl-agents" | awk -F'\t' '{print $1"|"$2"|"$3"|"$5}' | LC_ALL=C sort)
 b=$(python3 -c "
 import json,re,os
 s=open(os.path.expanduser('~/.config/omarchy/extensions/omarchy-menu.jsonc')).read()
@@ -15,6 +15,6 @@ for k,v in d.items():
         agent=v['label'].replace(' ●','').split(' · ')[0]
         cwd,st,pane=(v['description'].split(' · ')+['','',''])[:3]
         out.append('|'.join([agent,cwd,st,pane]))
-print('\n'.join(sorted(out)))" 2>/dev/null)
+print('\n'.join(out))" 2>/dev/null | LC_ALL=C sort)
 if [ "$a" = "$b" ]; then echo "IN SYNC ($(printf '%s' "$a" | grep -c .) agents)"; else
   echo "DIVERGED"; echo "--- detected ---"; echo "$a"; echo "--- menu ---"; echo "$b"; exit 1; fi

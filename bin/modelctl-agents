@@ -6,7 +6,7 @@ Sources, deduplicated:
   herdr   `herdr agent list` — status and pane, focused via `herdr agent focus`
   windows any agent process (claude, opencode, codex, ...) that has a TTY and a
           Hyprland window among its ancestors — a plain foot/alacritty session,
-          `omarchy agent`, etc. — focused via `hyprctl dispatch focuswindow pid:N`.
+          `omarchy agent`, etc. — focused via a Hyprland dispatch on the window pid.
           Processes under herdr are skipped here (herdr already reports them);
           headless helpers (daemons, background sessions) have no window and are
           ignored. tmux panes are not walked yet.
@@ -76,7 +76,9 @@ for pid, (ppid, tty, comm, args) in procs.items():
     except OSError:
         cwd = ""
     rows.append([comm, cwd, "running", "1" if win["pid"] == active else "0", f"pid:{pid}",
-                 f"hyprctl dispatch focuswindow pid:{win['pid']}"])
+                 # Hyprland >= 0.56 takes Lua; older builds take the classic dispatcher.
+                 f"hyprctl dispatch 'hl.dsp.focus({{ window = \"pid:{win['pid']}\" }})' >/dev/null 2>&1"
+                 f" || hyprctl dispatch focuswindow pid:{win['pid']}"])
 
 for r in rows:
     print("\t".join(r))

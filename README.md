@@ -12,9 +12,13 @@ running [herdr](https://github.com/tjcelaya/herdr) coding agent at a glance.
 - **Images** (`󰋩`) — left-click (tag = selected model) generates one image with the model selected in the
   menu's `stable-diffusion` section; right-click toggles a resident SD-Turbo
   `sd-server` on :8091. Dim = one-shot, bright = resident.
-- **Agents** (`󱃒` + count; glyph via the `agentsIcon` setting) — click opens the
-  agents submenu directly, which lists every running herdr
-  agent with its cwd and status. Selecting one focuses its pane.
+- **Agents** (`󱃒` + count; glyph via the `agentsIcon` setting) — dim with no
+  number when nothing is running, lit with a count otherwise. Click opens the agents
+  submenu: every running coding agent with its directory and status; selecting one
+  focuses it. Detected: herdr panes (status + pane focus) and any `claude`,
+  `opencode`, `codex`, … process with a TTY inside a Hyprland window — a plain
+  terminal, `omarchy agent`, etc. (window focus). Search matches agent name and
+  every path segment. tmux panes: planned.
 
 Names, paths and status live in the menu; the bar stays to icons and short tags.
 
