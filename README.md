@@ -72,10 +72,15 @@ kept, both on install and on removal).
 
 ### Developing
 
-Symlink the checkout as the plugin folder and restart the shell after QML edits
-(a symlinked folder is not hot-reloaded): `ln -s ~/src/omarchy-modelctl
-~/.config/omarchy/plugins/tjcelaya.modelctl`. `omarchy plugin validate .` checks
-the manifest; `bin/modelctl-check` checks the bar and menu agree with herdr.
+Work in a clone (e.g. `~/src/omarchy-modelctl`), push, then pull it into the
+installed copy the same way any user would:
+
+    omarchy plugin update tjcelaya.modelctl    # git pull in ~/.config/omarchy/plugins/tjcelaya.modelctl
+    omarchy restart shell                      # QML changes need a reload; scripts take effect at once
+
+Everything the widget runs lives in the installed folder, so the machine never runs
+unpushed code. `omarchy plugin validate .` checks the manifest before pushing;
+`bin/modelctl-check` checks the bar and menu agree with herdr.
 
 ## Requirements
 
