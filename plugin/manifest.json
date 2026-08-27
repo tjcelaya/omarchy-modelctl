@@ -23,7 +23,8 @@
       "port": 8090,
       "showCwd": true,
       "imageDir": "~/Pictures/generated",
-      "agentsIcon": "󱃒"
+      "agentsIcon": "󱃒",
+      "modelIcon": "󰚩"
     },
     "schema": [
       {
@@ -61,6 +62,12 @@
         "type": "string",
         "label": "Agents badge glyph (try 󰆍 󰞷 󰭹)",
         "defaultValue": "󱃒"
+      },
+      {
+        "key": "modelIcon",
+        "type": "string",
+        "label": "Model glyph (try 󰧑 󰘚 󰻠 󰍛)",
+        "defaultValue": "󰚩"
       }
     ]
   }

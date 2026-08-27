@@ -24,6 +24,7 @@ Item {
   property var agents: []
   property bool imageOn: false
   property string sdModel: "turbo"
+  readonly property string modelIcon:  (settings && settings.modelIcon) || "󰚩"
   readonly property string agentsIcon: (settings && settings.agentsIcon) || "󱃒"
   // Glyphs at the shell's icon size, tags at body size — matches first-party widgets.
   readonly property int iconPx: Style.font.icon
@@ -103,7 +104,7 @@ Item {
       textFormat: Text.RichText
       color: root.fg
       opacity: root.state === "ready" ? 1.0 : 0.55
-      text: root.tagged("󰚩", root.state === "ready" ? root.abbrev(root.model)
+      text: root.tagged(root.modelIcon, root.state === "ready" ? root.abbrev(root.model)
                               : root.state === "loading" ? "···" : "")
       MouseArea {
         anchors.fill: parent
@@ -162,7 +163,7 @@ Item {
     visible: root.vertical
     font.family: root.fam; font.pixelSize: root.iconPx
     color: root.fg
-    text: "󰚩"
+    text: root.modelIcon
     MouseArea { anchors.fill: parent; onClicked: root.run(root.scriptDir() + "/modelctl-menu") }
   }
 }
