@@ -28,24 +28,33 @@ Prompts via Omarchy's native input popup, saves to `~/Pictures/generated` as
 `<timestamp>-<prompt-slug>.png`, then opens it. Override the folder with
 `MODELCTL_IMAGE_DIR` or the `imageDir` setting; `SD_STEPS`, `SD_W`, `SD_H` tune the rest.
 
-Models (`modelctl-image --list`; pick in the menu or `modelctl-image --<id> "prompt"`).
-Measured 2026-08-26 at native res on the 23,552 MiB pool, `--vae-tiling` on:
+Models (`modelctl-image --list`; pick in the menu or `modelctl-image --<id> "prompt"`):
+`turbo` SD-Turbo 512², `sd15` SD 1.5 512², `sdxl` SDXL-Lightning 1024², `zimage`
+Z-Image-Turbo Q8 1024², `flux` Flux.1-schnell Q8 1024², `chroma` Chroma1-HD Q8 1024².
+Nothing here is measured for you: run `--check` (below) and the menu shows the wall
+time and peak GPU use from *your* hardware.
 
-| id | model | res | steps | wall | peak GPU | beside gpt-oss-20b (~14.4 GiB)? |
-|---|---|---|---|---|---|---|
-| `turbo` | SD-Turbo | 512² | 4 | ~9 s | ~4.5 GiB | yes |
-| `sd15` | SD 1.5 | 512² | 20 | ~32 s | ~4 GiB | yes |
-| `sdxl` | SDXL-Lightning 4-step | 1024² | 4 | ~36 s | 7.6 GiB | yes |
-| `zimage` | Z-Image-Turbo Q8 + Qwen3-4B TE | 1024² | 8 | ~3m20 | 11.6 GiB | no — fits beside `fast` |
-| `flux` | Flux.1-schnell Q8 | 1024² | 4 | ~2m30 | 18.6 GiB | no |
-| `chroma` | Chroma1-HD Q8 | 1024² | 20 | ~22 min | 15.6 GiB | no |
+Before generating, the script reads the amdgpu memory counters; if the model's peak
+would not fit next to what is loaded, it stops the running `modelctl@*` LLM unit and
+starts it again afterwards. The peak used for that decision is a conservative nominal
+figure until a native-res `--check --full` replaces it. Generations are serialized
+(one `sd-cli` at a time — two on one iGPU can hang it); a second click waits and says so.
+Checkpoints live in `sd_dir` from `models.conf` (`MODELCTL_SD_DIR` overrides).
 
-Before generating, the script reads the amdgpu memory counters; if the model's measured
-peak would not fit next to what is loaded, it stops the running `modelctl@*` LLM unit
-and starts it again afterwards (verified: gpt-oss-20b active again after a Flux run,
-2m35 total). So `zimage` runs beside `fast` untouched but parks `default`; `flux` and
-`chroma` (`(!)` in the menu) park anything.
-Checkpoints live in `$MODELCTL_SD_DIR` (default `/mnt/data/stable-diffusion-models`).
+Every run logs to `~/.local/state/modelctl/logs/<stamp>-<model>.log`. A failure is
+classified before it is shown — *GPU hung and was reset by amdgpu* (with the kernel's
+ring-timeout line), *out of GPU memory* (with the counters), *checkpoint unreadable*,
+*sd-cli crashed with signal N* — instead of the last three lines of a progress bar.
+
+Two opt-in keys under `[defaults]` in `~/.config/modelctl/models.conf`:
+
+- `sd_check = true` enables `modelctl-image --check <id> [--no-fa] [--res N] [--steps N] [--full]`:
+  a fixed-prompt smoke test (1 step at 512² by default; `--full` = the model's native
+  res and steps). Each run appends wall time, peak GPU use and the failure class to
+  `~/.local/state/modelctl/sd-checks.tsv` (`--checks` prints it). `--no-fa` / `--res`
+  are for bisecting a hang: is it flash attention, or the resolution?
+- `sd_retry_no_fa = true`: when a generation dies with a Vulkan device-lost, retry it
+  once without `--diffusion-fa` and say so in the notification.
 
 Deliberately separate from Omarchy's built-in `omarchy.agents`, which reports Claude
 subscription usage rather than running sessions.
@@ -84,7 +93,8 @@ installed copy the same way any user would:
 
 Everything the widget runs lives in the installed folder, so the machine never runs
 unpushed code. `omarchy plugin validate .` checks the manifest before pushing;
-`bin/modelctl-check` checks the bar and menu agree with herdr.
+`bin/modelctl-check` checks the bar and menu agree with herdr; `modelctl-image --check`
+(opt-in) smoke-tests an image model.
 
 ## Requirements
 

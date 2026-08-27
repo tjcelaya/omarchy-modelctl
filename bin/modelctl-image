@@ -2,24 +2,138 @@
 # One-shot image generation (SD-Turbo/1.5, SDXL-Lightning, Z-Image, Flux, Chroma). Loads and exits, so it never holds the
 # GPU pool. Uses Omarchy's native input popup — gum in a floating terminal never
 # reliably got keyboard focus.
+#
+#   modelctl-image [--<id>] [prompt]        generate (prompt via popup if omitted)
+#   modelctl-image --list                   id|label|description|peak MiB used for parking
+#   modelctl-image --checks                 results of previous --check runs
+#   modelctl-image --check <id> [--no-fa] [--res N] [--steps N] [--full]
+#       smoke-test a model: fixed prompt, 1 step at 512² unless overridden (--full =
+#       native res + default steps). Records wall time, peak GPU use and the failure
+#       class to $STATE/sd-checks.tsv. Off unless models.conf [defaults] sd_check = true.
+#
+# models.conf [defaults] keys used here:
+#   sd_dir          checkpoint folder
+#   sd_check        true → enable --check (default false)
+#   sd_retry_no_fa  true → after a GPU device-lost, retry once without --diffusion-fa
 set -uo pipefail
-SD="${MODELCTL_SD_DIR:-/mnt/data/stable-diffusion-models}"
+D="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+ST="$HOME/.local/state/modelctl"; mkdir -p "$ST/logs" "$ST/checks"
+CHECKS="$ST/sd-checks.tsv"
+conf() { "$D/modelctl" conf "$1" "${2:-}"; }
+istrue() { case "$(printf '%s' "$1" | tr 'A-Z' 'a-z')" in 1|true|yes|on) return 0;; *) return 1;; esac; }
+SD="${MODELCTL_SD_DIR:-$(conf sd_dir "$HOME/.local/share/stable-diffusion/models")}"
+notify() { notify-send -a modelctl "$@"; }
 
-# Model table: id | label | description | peak GPU MiB | steps | cfg | res | sd-cli args
-# Peak GPU MiB measured 2026-08-26 at native res with --vae-tiling (23.5 GiB pool):
-# turbo/sd15 <5G, sdxl 7.6G, zimage 11.6G, flux 18.6G, chroma 15.6G.
-models() { cat <<EOF
-turbo|· Turbo|512² · 4 steps · ~9s · drafts|4500|4|1.0|512|-m $SD/sd_turbo.safetensors --type f16
-sd15|· SD 1.5|512² · 20 steps · ~32s · steers harder|4000|20|7.0|512|-m $SD/v1-5-pruned-emaonly-fp16.safetensors --type f16
-sdxl|· SDXL-Lightning|1024² · 4 steps · ~36s · fits beside LLM|7600|4|1.0|1024|-m $SD/sdxl_lightning_4step.safetensors --vae $SD/sdxl_vae_fp16_fix.safetensors --sampling-method euler --scheduler sgm_uniform --diffusion-fa --vae-tiling
-zimage|· Z-Image-Turbo|1024² · 8 steps · ~3m20 · best quality/size|11600|8|1.0|1024|--diffusion-model $SD/z_image_turbo-Q8_0.gguf --vae $SD/flux_ae.safetensors --llm $SD/Qwen3-4B-Instruct-2507-Q8_0.gguf --diffusion-fa --vae-tiling
-flux|· Flux.1-schnell|1024² · 4 steps · ~2m30 · 18.6G|18600|4|1.0|1024|--diffusion-model $SD/flux1-schnell-Q8_0.gguf --vae $SD/flux_ae.safetensors --clip_l $SD/clip_l.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --diffusion-fa --vae-tiling
-chroma|· Chroma1-HD|1024² · 20 steps · ~22m · 15.6G|15600|20|4.0|1024|--diffusion-model $SD/Chroma1-HD-Q8_0.gguf --vae $SD/flux_ae.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --sampling-method euler --diffusion-fa --vae-tiling
-EOF
+# Model table: id | label | description | nominal peak GPU MiB | steps | cfg | res | sd-cli args
+# The peak column is a conservative nominal figure used only to decide whether the
+# running LLM must be parked; a native-res `--check --full` on this machine replaces it.
+models() { cat <<TABLE
+turbo|· Turbo|512² · 4 steps · drafts|4500|4|1.0|512|-m $SD/sd_turbo.safetensors --type f16
+sd15|· SD 1.5|512² · 20 steps · steers harder|4000|20|7.0|512|-m $SD/v1-5-pruned-emaonly-fp16.safetensors --type f16
+sdxl|· SDXL-Lightning|1024² · 4 steps|7600|4|1.0|1024|-m $SD/sdxl_lightning_4step.safetensors --vae $SD/sdxl_vae_fp16_fix.safetensors --sampling-method euler --scheduler sgm_uniform --diffusion-fa --vae-tiling
+zimage|· Z-Image-Turbo|1024² · 8 steps · Qwen3-4B text encoder|11600|8|1.0|1024|--diffusion-model $SD/z_image_turbo-Q8_0.gguf --vae $SD/flux_ae.safetensors --llm $SD/Qwen3-4B-Instruct-2507-Q8_0.gguf --diffusion-fa --vae-tiling
+flux|· Flux.1-schnell|1024² · 4 steps · T5-XXL text encoder|18600|4|1.0|1024|--diffusion-model $SD/flux1-schnell-Q8_0.gguf --vae $SD/flux_ae.safetensors --clip_l $SD/clip_l.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --diffusion-fa --vae-tiling
+chroma|· Chroma1-HD|1024² · 20 steps · T5-XXL text encoder|15600|20|4.0|1024|--diffusion-model $SD/Chroma1-HD-Q8_0.gguf --vae $SD/flux_ae.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --sampling-method euler --diffusion-fa --vae-tiling
+TABLE
 }
-if [ "${1:-}" = --list ]; then models | cut -d'|' -f1-4; exit 0; fi
 
-SEL=$(cat "$HOME/.local/state/modelctl/sd-model" 2>/dev/null || echo turbo)
+# Latest native-res check result for a model: "status<TAB>wall<TAB>peak", or nothing.
+last_check() { [ -f "$CHECKS" ] && awk -F'\t' -v id="$1" '$2==id && $3=="full"{r=$4"\t"$5"\t"$6} END{if(r)print r}' "$CHECKS"; }
+
+if [ "${1:-}" = --list ]; then
+  models | while IFS='|' read -r id lab desc peak _; do
+    r=$(last_check "$id")
+    if [ -n "$r" ]; then IFS=$'\t' read -r st wall pk <<<"$r"
+      if [ "$st" = ok ]; then desc="$desc · ~${wall}s · ${pk} MiB"; peak=$pk; else desc="$desc · last check: $st"; fi
+    fi
+    echo "$id|$lab|$desc|$peak"
+  done; exit 0
+fi
+if [ "${1:-}" = --checks ]; then
+  if [ -f "$CHECKS" ]; then column -ts $'\t' "$CHECKS"
+  else echo "no checks recorded (models.conf: sd_check = true, then modelctl-image --check <id>)"; fi; exit 0
+fi
+
+# GPU pool = VRAM carve-out + GTT ceiling; usage from the amdgpu sysfs counters.
+gpu_pool() { local d; for d in /sys/class/drm/card*/device; do
+  [ -e "$d/mem_info_vram_total" ] && { echo $(( ($(cat "$d/mem_info_vram_total")+$(cat "$d/mem_info_gtt_total"))/1048576 )); return; }; done; echo 23552; }
+gpu_used() { local d; for d in /sys/class/drm/card*/device; do
+  [ -e "$d/mem_info_vram_used" ] && { echo $(( ($(cat "$d/mem_info_vram_used")+$(cat "$d/mem_info_gtt_used"))/1048576 )); return; }; done; echo 0; }
+
+# Turn a failed run into one line a person can act on. Sets CLASS (short id) and MSG.
+classify() { # $1 log, $2 rc
+  local log="$1" rc="$2" hang; CLASS=other
+  if grep -qE 'DeviceLost|device lost' "$log"; then CLASS=device-lost
+    MSG="GPU hung and was reset by amdgpu — not a model or prompt error."
+    hang=$(journalctl -k --since '-5min' -o cat 2>/dev/null | grep -E 'ring .* timeout' | tail -1)
+    [ -n "$hang" ] && MSG="$MSG Kernel: ${hang#amdgpu *: }"
+    ls /sys/class/drm/card*/device/devcoredump/data >/dev/null 2>&1 && MSG="$MSG (GPU devcoredump under /sys/class/drm/card*/device/devcoredump)"
+  elif grep -qE 'OutOfDeviceMemory|OutOfHostMemory|failed to allocate|ggml_vulkan: .*alloc' "$log"; then CLASS=oom
+    MSG="Out of GPU memory: $(gpu_used) of $(gpu_pool) MiB in use when it failed."
+  elif grep -qiE 'failed to load|invalid gguf|not a valid|no such file|failed to open' "$log"; then CLASS=load
+    MSG="Checkpoint unreadable: $(grep -iE 'failed to load|invalid gguf|no such file|failed to open' "$log" | tail -1 | cut -c1-160)"
+  elif [ "$rc" -ge 128 ]; then CLASS=crash
+    MSG="sd-cli crashed with signal $((rc-128)) (see coredumpctl); log: $log"
+  else
+    MSG="sd-cli exit $rc: $(grep -vE '^\s*\|' "$log" | tail -2 | tr '\n' ' ' | cut -c1-200)"
+  fi
+}
+
+# Run sd-cli, sampling GPU use once a second. Sets RC, PEAK_SEEN, WALL.
+run_sd() { # $1 log, rest = args
+  local log="$1" t0 t1 pid u; shift; PEAK_SEEN=0
+  t0=$(date +%s)
+  sd-cli "$@" >"$log" 2>&1 & pid=$!
+  while kill -0 "$pid" 2>/dev/null; do u=$(gpu_used); [ "$u" -gt "$PEAK_SEEN" ] && PEAK_SEEN=$u; sleep 1; done
+  wait "$pid"; RC=$?; t1=$(date +%s); WALL=$((t1-t0))
+}
+
+# Park the running LLM unit only if this model would not fit next to it (caller restores).
+park_if_needed() { # $1 peak MiB
+  PARKED=""
+  if [ $(( $(gpu_used) + $1 )) -gt $(gpu_pool) ]; then
+    PARKED=$(systemctl --user list-units --plain --no-legend 'modelctl*.service' 2>/dev/null \
+             | awk '$4=="running"{print $1}' | grep -v '@image' | head -1)
+    if [ -n "$PARKED" ]; then
+      notify -i image "Unloading $PARKED" "$MODEL needs ~$1 MiB · it comes back after"
+      systemctl --user stop "$PARKED"
+    fi
+  fi
+}
+unpark() { [ -n "${PARKED:-}" ] && systemctl --user start "$PARKED"; PARKED=""; }
+
+# One image at a time: two sd-cli processes sharing an iGPU thrash and can hang it.
+take_lock() { exec 9>"$ST/image.lock"
+  flock -n 9 || { notify -i image "Waiting for the running generation" "$MODEL · $1"; flock 9; }; }
+
+# ── --check: smoke-test a model ──────────────────────────────────────────────
+if [ "${1:-}" = --check ]; then
+  istrue "$(conf sd_check false)" || { echo "modelctl-image --check is off: set sd_check = true under [defaults] in ~/.config/modelctl/models.conf" >&2; exit 2; }
+  MODEL="${2:?usage: --check <id> [--no-fa] [--res N] [--steps N] [--full]}"; shift 2
+  row=$(models | grep "^$MODEL|") || { echo "unknown model $MODEL" >&2; exit 1; }
+  IFS='|' read -r _ _ _ PEAK DEF_STEPS DEF_CFG DEF_RES ARGS <<<"$row"
+  RES=512; STEPS=1; VARIANT=smoke
+  while [ $# -gt 0 ]; do case "$1" in
+    --no-fa)  ARGS=$(printf '%s\n' $ARGS | grep -vx -- '--diffusion-fa' | tr '\n' ' '); VARIANT="$VARIANT,no-fa"; shift ;;
+    --res)    RES="$2"; VARIANT="$VARIANT,res$2"; shift 2 ;;
+    --steps)  STEPS="$2"; VARIANT="$VARIANT,steps$2"; shift 2 ;;
+    --full)   RES=$DEF_RES; STEPS=$DEF_STEPS; VARIANT=full; shift ;;
+    *) echo "unknown option $1" >&2; exit 1 ;; esac; done
+  stamp=$(date +%Y%m%d-%H%M%S); LOG="$ST/logs/check-$stamp-$MODEL.log"
+  take_lock "check"
+  park_if_needed "$PEAK"
+  echo "check $MODEL [$VARIANT] ${RES}² ${STEPS} steps → $LOG"
+  run_sd "$LOG" $ARGS -p "a red cube on a white table" --steps "$STEPS" --cfg-scale "$DEF_CFG" \
+         -W "$RES" -H "$RES" -o "$ST/checks/$MODEL-$(printf '%s' "$VARIANT" | tr ',' '-').png"
+  unpark
+  if [ "$RC" = 0 ]; then status=ok; MSG="ok"; else classify "$LOG" "$RC"; status=$CLASS; fi
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$stamp" "$MODEL" "$VARIANT" "$status" "$WALL" "$PEAK_SEEN" "$MSG" >> "$CHECKS"
+  echo "$MODEL [$VARIANT]: $status · ${WALL}s · peak ${PEAK_SEEN} MiB · $MSG"
+  [ "$status" = ok ]; exit
+fi
+
+# ── generate ─────────────────────────────────────────────────────────────────
+SEL=$(cat "$ST/sd-model" 2>/dev/null || echo turbo)
 MODEL="${MODELCTL_SD_MODEL:-$SEL}"
 case "${1:-}" in
   --sd15|--sd) MODEL=sd15; shift ;;
@@ -27,15 +141,16 @@ case "${1:-}" in
   --model)     MODEL="$2"; shift 2 ;;
   --*)         MODEL="${1#--}"; shift ;;
 esac
-row=$(models | grep "^$MODEL|") || { notify-send -a modelctl -u critical "Unknown image model" "$MODEL"; exit 1; }
-IFS='|' read -r _ _ _ PEAK DEF_STEPS DEF_CFG DEF_RES ARGS <<<"$row"
+row=$("$0" --list | grep "^$MODEL|") || { notify -u critical "Unknown image model" "$MODEL"; exit 1; }
+IFS='|' read -r _ _ _ PEAK <<<"$row"
+IFS='|' read -r _ _ _ _ DEF_STEPS DEF_CFG DEF_RES ARGS <<<"$(models | grep "^$MODEL|")"
 # First path-ish token is the checkpoint; check it exists so failures are loud.
 CKPT=$(printf '%s\n' $ARGS | grep -m1 "^$SD/")
-[ -f "$CKPT" ] || { notify-send -a modelctl -u critical "Missing checkpoint" "$CKPT"; exit 1; }
+[ -f "$CKPT" ] || { notify -u critical "Missing checkpoint" "$CKPT"; exit 1; }
 # Where images land. Override per-invocation, or set MODELCTL_IMAGE_DIR in the
 # environment / the plugin's imageDir setting for a permanent change.
 OUT="${MODELCTL_IMAGE_DIR:-$HOME/Pictures/generated}"
-mkdir -p "$OUT" 2>/dev/null || { notify-send -a modelctl -u critical "Cannot write" "$OUT"; exit 1; }
+mkdir -p "$OUT" 2>/dev/null || { notify -u critical "Cannot write" "$OUT"; exit 1; }
 
 prompt="${*:-}"
 if [ -z "$prompt" ]; then
@@ -45,32 +160,31 @@ prompt="$(printf '%s' "$prompt" | tr -d '\r\n')"
 [ -z "$prompt" ] && exit 0
 
 slug=$(printf '%s' "$prompt" | tr -cs '[:alnum:]' '-' | cut -c1-40 | sed 's/^-//;s/-$//')
-f="$OUT/$(date +%Y%m%d-%H%M%S)-${MODEL}-${slug:-image}.png"
+stamp=$(date +%Y%m%d-%H%M%S)
+f="$OUT/$stamp-${MODEL}-${slug:-image}.png"
+LOG="$ST/logs/$stamp-$MODEL.log"
 
-# Park the running LLM unit only if this model would not fit next to it; restore after.
-# Pool = VRAM carve-out + GTT ceiling; usage read from the amdgpu sysfs counters.
-gpu_pool() { local d; for d in /sys/class/drm/card*/device; do
-  [ -e "$d/mem_info_vram_total" ] && { echo $(( ($(cat "$d/mem_info_vram_total")+$(cat "$d/mem_info_gtt_total"))/1048576 )); return; }; done; echo 23552; }
-gpu_used() { local d; for d in /sys/class/drm/card*/device; do
-  [ -e "$d/mem_info_vram_used" ] && { echo $(( ($(cat "$d/mem_info_vram_used")+$(cat "$d/mem_info_gtt_used"))/1048576 )); return; }; done; echo 0; }
-PARKED=""
-if [ $(( $(gpu_used) + PEAK )) -gt $(gpu_pool) ]; then
-  PARKED=$(systemctl --user list-units --plain --no-legend 'modelctl*.service' 2>/dev/null \
-           | awk '$4=="running"{print $1}' | grep -v '@image' | head -1)
-  if [ -n "$PARKED" ]; then
-    notify-send -a modelctl -i image "Unloading $PARKED" "$MODEL needs ~${PEAK} MiB · it comes back after"
-    systemctl --user stop "$PARKED"
+take_lock "$prompt"
+park_if_needed "$PEAK"
+notify -i image "Generating ($MODEL)…" "$prompt"
+gen() { run_sd "$LOG" $ARGS -p "$prompt" \
+     --steps "${SD_STEPS:-$DEF_STEPS}" --cfg-scale "${SD_CFG:-$DEF_CFG}" \
+     -W "${SD_W:-$DEF_RES}" -H "${SD_H:-$DEF_RES}" -o "$f"; }
+gen
+if [ "$RC" != 0 ]; then
+  classify "$LOG" "$RC"
+  if [ "$CLASS" = device-lost ] && istrue "$(conf sd_retry_no_fa false)" && printf '%s\n' $ARGS | grep -qx -- '--diffusion-fa'; then
+    notify -i image "GPU hung — retrying without flash attention" "$MODEL · $prompt"
+    ARGS=$(printf '%s\n' $ARGS | grep -vx -- '--diffusion-fa' | tr '\n' ' ')
+    LOG="$ST/logs/$stamp-$MODEL-retry.log"; gen
+    [ "$RC" != 0 ] && classify "$LOG" "$RC"
   fi
 fi
-notify-send -a modelctl -i image "Generating ($MODEL)…" "$prompt"
-sd-cli $ARGS -p "$prompt" \
-     --steps "${SD_STEPS:-$DEF_STEPS}" --cfg-scale "${SD_CFG:-$DEF_CFG}" \
-     -W "${SD_W:-$DEF_RES}" -H "${SD_H:-$DEF_RES}" \
-     -o "$f" >/tmp/modelctl-image.log 2>&1; rc=$?
-[ -n "$PARKED" ] && systemctl --user start "$PARKED"
-if [ $rc = 0 ] && [ -s "$f" ]; then
-  notify-send -a modelctl -i "$f" "Image ready" "$(basename "$f")"
+unpark
+if [ "$RC" = 0 ] && [ -s "$f" ]; then
+  notify -i "$f" "Image ready" "$(basename "$f") · ${WALL}s · peak ${PEAK_SEEN} MiB"
   uwsm-app -- imv "$f" >/dev/null 2>&1 || xdg-open "$f" >/dev/null 2>&1 &
 else
-  notify-send -a modelctl -u critical "Generation failed" "$(tail -3 /tmp/modelctl-image.log | tr '\n' ' ')"
+  notify -u critical "Generation failed ($MODEL)" "$MSG"
+  echo "$MSG (log: $LOG)" >&2; exit 1
 fi

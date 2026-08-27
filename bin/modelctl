@@ -7,6 +7,7 @@
   modelctl list --tsv      id, label, tag, ctx, description, path, vision  (for scripts)
   modelctl image           resident sd-server (see MODELCTL_SD_DIR)
   modelctl show <id>       the exact llama-server command line, without running it
+  modelctl conf <key> [default]   print a [defaults] value from models.conf (for the shell scripts)
 
 Models are found under MODELCTL_MODEL_DIRS (colon-separated; default
 ~/.lmstudio/models:~/.cache/llama.cpp:~/models:~/.ollama/models), recursively,
@@ -145,6 +146,10 @@ def cmdline(m):
 def main(argv):
     cp = load_conf()
     cmd = argv[0] if argv else "default"
+    if cmd == "conf":
+        # Shell helpers read their settings through here so the INI stays the one source.
+        v = cp.get("defaults", argv[1], fallback=argv[2] if len(argv) > 2 else "")
+        print(os.path.expanduser(v)); return
     if cmd == "image":
         sd = os.environ.get("MODELCTL_SD_DIR", cp.get("defaults", "sd_dir", fallback=f"{HOME}/.local/share/stable-diffusion/models"))
         ck = cp.get("defaults", "sd_server_model", fallback="sd_turbo.safetensors")

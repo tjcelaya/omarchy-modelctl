@@ -12,6 +12,13 @@
 #        tag    ≤5-char text shown next to the bar icon (default: derived from label)
 #        note   one line for the menu description / `modelctl list`
 #        mmproj vision projector path (default: an mmproj-*.gguf in the same folder)
+# [defaults]-only keys for image generation:
+#        sd_dir          checkpoint folder for modelctl-image / sd-server
+#        sd_server_model checkpoint the resident sd-server loads
+#        sd_check        true -> `modelctl-image --check <id>` smoke-tests a model and
+#                        records wall time / peak GPU use / failure class (default false)
+#        sd_retry_no_fa  true -> if the GPU hangs (Vulkan device lost) mid-generation,
+#                        retry once without --diffusion-fa (default false)
 
 [defaults]
 default = gpt-oss-20b*
@@ -21,6 +28,8 @@ default = gpt-oss-20b*
 args = -ngl 99 -fa on -ctk q8_0 -ctv q8_0 -np 1 --cache-reuse 256 --jinja
 sd_dir = ~/.local/share/stable-diffusion/models
 sd_server_model = sd_turbo.safetensors
+# sd_check = true
+# sd_retry_no_fa = true
 
 [gpt-oss-20b*]
 ctx = 131072
