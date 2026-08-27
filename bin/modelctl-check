@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify the menu's agent rows match herdr exactly. Exit 1 on divergence.
+# Verify the menu's agent rows match modelctl-agents (herdr + windows) exactly. Exit 1 on divergence.
 # Parses the CURRENT row format: label "name · shortcwd[ ●]",
 # description "cwd · status · pane".
 set -u
@@ -11,10 +11,10 @@ s=open(os.path.expanduser('~/.config/omarchy/extensions/omarchy-menu.jsonc')).re
 d=json.loads(re.sub(r'^\s*//.*$','',s,flags=re.M))
 out=[]
 for k,v in d.items():
-    if re.match(r'modelctl\.agent\d',k):
+    if re.match(r'modelctl\.agents\.\d',k):
         agent=v['label'].replace(' ●','').split(' · ')[0]
         cwd,st,pane=(v['description'].split(' · ')+['','',''])[:3]
         out.append('|'.join([agent,cwd,st,pane]))
 print('\n'.join(sorted(out)))" 2>/dev/null)
 if [ "$a" = "$b" ]; then echo "IN SYNC ($(printf '%s' "$a" | grep -c .) agents)"; else
-  echo "DIVERGED"; echo "--- herdr ---"; echo "$a"; echo "--- menu ---"; echo "$b"; exit 1; fi
+  echo "DIVERGED"; echo "--- detected ---"; echo "$a"; echo "--- menu ---"; echo "$b"; exit 1; fi

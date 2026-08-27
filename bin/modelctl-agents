@@ -1,14 +1,82 @@
-#!/usr/bin/env bash
-# Emit running herdr agents as TSV: agent<TAB>cwd<TAB>status<TAB>focused<TAB>pane_id
-# Empty output (exit 0) when herdr isn't running or has no agents.
-herdr agent list 2>/dev/null | python3 -c '
-import sys,json,os
-try: d=json.load(sys.stdin)
-except Exception: sys.exit(0)
-for a in d.get("result",{}).get("agents",[]) or []:
-    cwd=a.get("cwd") or ""
-    home=os.path.expanduser("~")
-    if cwd.startswith(home): cwd="~"+cwd[len(home):]
-    print("\t".join([a.get("agent","?"),cwd,a.get("agent_status",""),
-                     "1" if a.get("focused") else "0", a.get("pane_id","")]))
-' 2>/dev/null
+#!/usr/bin/env python3
+"""Every running interactive coding agent, as TSV:
+   agent  cwd  status  focused  id  focus-command
+
+Sources, deduplicated:
+  herdr   `herdr agent list` — status and pane, focused via `herdr agent focus`
+  windows any agent process (claude, opencode, codex, ...) that has a TTY and a
+          Hyprland window among its ancestors — a plain foot/alacritty session,
+          `omarchy agent`, etc. — focused via `hyprctl dispatch focuswindow pid:N`.
+          Processes under herdr are skipped here (herdr already reports them);
+          headless helpers (daemons, background sessions) have no window and are
+          ignored. tmux panes are not walked yet.
+Empty output, exit 0, when nothing is running."""
+import json, os, subprocess, sys
+
+AGENTS = {"claude", "opencode", "codex", "gemini", "pi", "omp", "crush", "copilot",
+          "cursor", "amp", "grok", "kimi", "kilo", "qwen", "droid", "aider"}
+HOME = os.path.expanduser("~")
+
+
+def short(p):
+    return "~" + p[len(HOME):] if p.startswith(HOME) else p
+
+
+def run(cmd):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=3).stdout
+    except Exception:
+        return ""
+
+
+rows = []
+
+# ── herdr ──
+try:
+    for a in json.loads(run(["herdr", "agent", "list"])).get("result", {}).get("agents", []) or []:
+        rows.append([a.get("agent", "?"), short(a.get("cwd") or ""), a.get("agent_status", ""),
+                     "1" if a.get("focused") else "0", a.get("pane_id", ""),
+                     f"herdr agent focus {a.get('pane_id', '')}"])
+except Exception:
+    pass
+
+# ── windowed processes ──
+procs = {}
+for line in run(["ps", "-eo", "pid=,ppid=,tty=,comm=,args="]).splitlines():
+    parts = line.split(None, 4)
+    if len(parts) < 4:
+        continue
+    pid, ppid, tty, comm = parts[:4]
+    procs[int(pid)] = (int(ppid), tty, comm, parts[4] if len(parts) > 4 else "")
+
+try:
+    windows = {c["pid"]: c for c in json.loads(run(["hyprctl", "clients", "-j"])) if c.get("pid", 0) > 0}
+    active = json.loads(run(["hyprctl", "activewindow", "-j"]) or "{}").get("pid", -1)
+except Exception:
+    windows, active = {}, -1
+
+for pid, (ppid, tty, comm, args) in procs.items():
+    if comm not in AGENTS or tty == "?":
+        continue
+    if any(t in args for t in ("bg-pty-host", "daemon run", "bg-spare", "--bg-", "mcp serve")):
+        continue
+    win = None; under_herdr = False; p = ppid
+    for _ in range(12):
+        if p <= 1 or p not in procs:
+            break
+        if procs[p][2] == "herdr":
+            under_herdr = True; break
+        if p in windows:
+            win = windows[p]; break
+        p = procs[p][0]
+    if under_herdr or not win:
+        continue
+    try:
+        cwd = short(os.readlink(f"/proc/{pid}/cwd"))
+    except OSError:
+        cwd = ""
+    rows.append([comm, cwd, "running", "1" if win["pid"] == active else "0", f"pid:{pid}",
+                 f"hyprctl dispatch focuswindow pid:{win['pid']}"])
+
+for r in rows:
+    print("\t".join(r))

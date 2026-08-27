@@ -151,16 +151,15 @@ Item {
       }
     }
 
-    // ── agent count only; names, cwds and status live in the popup ────────
+    // ── agents: glyph always; count only when >0, lit only when >0 ─────────
     Text {
       anchors.verticalCenter: parent.verticalCenter
-      visible: root.agents.length > 0
       font.family: root.fam
       font.pixelSize: root.iconPx
       textFormat: Text.RichText
       color: root.fg
-      opacity: root.anyWorking ? 0.95 : 0.6
-      text: root.tagged(root.agentsIcon, String(root.agents.length))
+      opacity: root.agents.length === 0 ? 0.35 : root.anyWorking ? 1.0 : 0.8
+      text: root.tagged(root.agentsIcon, root.agents.length > 0 ? String(root.agents.length) : "")
       MouseArea {
         anchors.fill: parent
         onClicked: root.run(root.scriptDir() + "/modelctl-menu agents")
