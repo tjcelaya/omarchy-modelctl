@@ -9,7 +9,8 @@
 #   modelctl-image --check <id> [--no-fa] [--res N] [--steps N] [--full]
 #       smoke-test a model: fixed prompt, 1 step at 512² unless overridden (--full =
 #       native res + default steps). Records wall time, peak GPU use and the failure
-#       class to $STATE/sd-checks.tsv. Off unless models.conf [defaults] sd_check = true.
+#       class to $STATE/sd-checks.tsv; the image (if any) is kept under $STATE/checks/.
+#       Off unless models.conf [defaults] sd_check = true.
 #
 # models.conf [defaults] keys used here:
 #   sd_dir          checkpoint folder
@@ -83,7 +84,7 @@ classify() { # $1 log, $2 rc
 run_sd() { # $1 log, rest = args
   local log="$1" t0 t1 pid u; shift; PEAK_SEEN=0
   t0=$(date +%s)
-  sd-cli "$@" >"$log" 2>&1 & pid=$!
+  sd-cli "$@" >"$log" 2>&1 9>&- & pid=$!
   while kill -0 "$pid" 2>/dev/null; do u=$(gpu_used); [ "$u" -gt "$PEAK_SEEN" ] && PEAK_SEEN=$u; sleep 1; done
   wait "$pid"; RC=$?; t1=$(date +%s); WALL=$((t1-t0))
 }
@@ -103,8 +104,10 @@ park_if_needed() { # $1 peak MiB
 unpark() { [ -n "${PARKED:-}" ] && systemctl --user start "$PARKED"; PARKED=""; }
 
 # One image at a time: two sd-cli processes sharing an iGPU thrash and can hang it.
+# fd 9 must not leak into long-lived children (the image viewer) or the lock never drops.
 take_lock() { exec 9>"$ST/image.lock"
   flock -n 9 || { notify -i image "Waiting for the running generation" "$MODEL · $1"; flock 9; }; }
+drop_lock() { exec 9>&-; }
 
 # ── --check: smoke-test a model ──────────────────────────────────────────────
 if [ "${1:-}" = --check ]; then
@@ -124,8 +127,8 @@ if [ "${1:-}" = --check ]; then
   park_if_needed "$PEAK"
   echo "check $MODEL [$VARIANT] ${RES}² ${STEPS} steps → $LOG"
   run_sd "$LOG" $ARGS -p "a red cube on a white table" --steps "$STEPS" --cfg-scale "$DEF_CFG" \
-         -W "$RES" -H "$RES" -o "$ST/checks/$MODEL-$(printf '%s' "$VARIANT" | tr ',' '-').png"
-  unpark
+         -W "$RES" -H "$RES" -o "$ST/checks/$stamp-$MODEL-$(printf '%s' "$VARIANT" | tr ',' '-').png"
+  unpark; drop_lock
   if [ "$RC" = 0 ]; then status=ok; MSG="ok"; else classify "$LOG" "$RC"; status=$CLASS; fi
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$stamp" "$MODEL" "$VARIANT" "$status" "$WALL" "$PEAK_SEEN" "$MSG" >> "$CHECKS"
   echo "$MODEL [$VARIANT]: $status · ${WALL}s · peak ${PEAK_SEEN} MiB · $MSG"
@@ -180,10 +183,10 @@ if [ "$RC" != 0 ]; then
     [ "$RC" != 0 ] && classify "$LOG" "$RC"
   fi
 fi
-unpark
+unpark; drop_lock
 if [ "$RC" = 0 ] && [ -s "$f" ]; then
   notify -i "$f" "Image ready" "$(basename "$f") · ${WALL}s · peak ${PEAK_SEEN} MiB"
-  uwsm-app -- imv "$f" >/dev/null 2>&1 || xdg-open "$f" >/dev/null 2>&1 &
+  (uwsm-app -- imv "$f" >/dev/null 2>&1 || xdg-open "$f" >/dev/null 2>&1) &
 else
   notify -u critical "Generation failed ($MODEL)" "$MSG"
   echo "$MSG (log: $LOG)" >&2; exit 1
