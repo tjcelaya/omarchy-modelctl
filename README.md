@@ -28,19 +28,22 @@ Prompts via Omarchy's native input popup, saves to `~/Pictures/generated` as
 `<timestamp>-<prompt-slug>.png`, then opens it. Override the folder with
 `MODELCTL_IMAGE_DIR` or the `imageDir` setting; `SD_STEPS`, `SD_W`, `SD_H` tune the rest.
 
-Image models are `[sd:<id>]` sections in `~/.config/modelctl/models.conf` — label,
-note, nominal peak MiB, default steps/cfg/res and the sd-cli args (`$SD` = `sd_dir`).
-`models.conf.example` ships six (SD-Turbo, SD 1.5, SDXL-Lightning, Z-Image-Turbo,
-Flux.1-schnell, Chroma1-HD); keep the ones you have, tune flags per model there
-(e.g. drop `--diffusion-fa` for one that hangs your GPU). `modelctl-image --list`
-shows them; pick in the menu or `modelctl-image --<id> "prompt"`. Nothing is measured
-for you: run `--check` (below) and the menu shows the wall time and peak GPU use
-from *your* hardware.
+Image models are discovered like the LLMs: every checkpoint under `sd_dir`
+(`~/.config/modelctl/models.conf`; `MODELCTL_SD_DIR` overrides) is classified by
+family from its filename — SD 1.x, SD-Turbo, SDXL, SDXL-Lightning, Flux schnell/dev,
+Chroma, Z-Image, SD3 — and paired with the VAE / text encoders that family needs from
+the same folder (`flux_ae`, `t5-xxl`, `clip_l`, `clip_g`, a Qwen3-4B encoder for
+Z-Image). One that lacks a companion shows `(✗)` with what is missing and will not run.
+`[sd:<glob>]` sections overlay label, tag, steps/cfg/res, appended or replacement
+flags — e.g. drop `--diffusion-fa` for one model that hangs your GPU. `modelctl-image
+--list` shows them; pick in the menu or `modelctl-image --<id> "prompt"` (any unique
+substring of the id works: `--chroma`). Nothing is measured for you: run `--check`
+(below) and the menu shows the wall time and peak GPU use from *your* hardware.
 
 Before generating, the script reads the amdgpu memory counters; if the model's peak
 would not fit next to what is loaded, it stops the running `modelctl@*` LLM unit and
-starts it again afterwards. The peak used for that decision is a conservative nominal
-figure until a native-res `--check --full` replaces it. Generations are serialized
+starts it again afterwards. The peak used for that decision is estimated from the
+files' sizes until a native-res `--check --full` replaces it. Generations are serialized
 (one `sd-cli` at a time — two on one iGPU can hang it); a second click waits and says so.
 Checkpoints live in `sd_dir` from `models.conf` (`MODELCTL_SD_DIR` overrides).
 
@@ -102,7 +105,8 @@ unpushed code. `omarchy plugin validate .` checks the manifest before pushing;
 ## Requirements
 
 - `llama-cpp` + `ggml-vulkan` (or another ggml backend) — `llama-server` on `PATH`
-- GGUF models under `~/.lmstudio/models/` (or set `MODELCTL_MODEL_DIR`)
+- GGUF models anywhere in `MODELCTL_MODEL_DIRS` (default: the LM Studio, llama.cpp,
+  `~/models` and Ollama locations — all of them are scanned)
 - `stable-diffusion.cpp` (`sd-cli`, `sd-server`) and checkpoints under
   `MODELCTL_SD_DIR` — optional; only for the image button
 - `herdr` for the agent list — optional; without it the widget shows only the model
@@ -120,9 +124,10 @@ unpushed code. `omarchy plugin validate .` checks the manifest before pushing;
 
 Nothing is hardcoded. `modelctl` scans `MODELCTL_MODEL_DIRS` (default
 `~/.lmstudio/models`, `~/.cache/llama.cpp`, `~/models`, `~/.ollama/models`) for
-`*.gguf`, following symlinks — so **LM Studio** downloads are picked up as-is, and an
-**Ollama** store is read through its manifests and each pulled `name:tag` is served
-straight from its GGUF blob (Ollama does not need to be running). `mmproj-*.gguf`
+`*.gguf`, following symlinks, and merges everything it finds. Plain folders (LM Studio,
+llama.cpp's cache, your own) are picked up as-is; an **Ollama** store is read through
+its manifests and each pulled `name:tag` is served straight from its GGUF blob
+(Ollama does not need to be running). No model manager is required or preferred. `mmproj-*.gguf`
 projectors are attached automatically, sharded models start from shard 1, and the
 menu regenerates from the scan every time it opens.
 

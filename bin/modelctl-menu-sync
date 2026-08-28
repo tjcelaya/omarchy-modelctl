@@ -20,8 +20,9 @@ import sys,json,os,re
 static,out,rowfile=sys.argv[1],sys.argv[2],sys.argv[3]
 rows=[l.split("\t") for l in open(rowfile).read().splitlines() if l.strip()]
 s=open(static).read().replace("@BIN@", os.environ["MC_BIN"])
-import subprocess
+import subprocess, shlex
 SB=os.environ["MC_BIN"]
+shlex_q=shlex.quote
 # ── model rows: whatever `modelctl list` discovers on disk ──
 mrows=[]
 for line in subprocess.run([SB+"/modelctl","list","--tsv"],capture_output=True,text=True).stdout.splitlines():
@@ -37,7 +38,7 @@ s=s.replace("// @MODEL_ROWS@","\n".join(mrows))
 # ── image section (own section; separator below is the static modelctl.sep) ──
 import os
 ST=os.path.expanduser("~/.local/state/modelctl")
-sel=(open(ST+"/sd-model").read().strip() if os.path.exists(ST+"/sd-model") else "turbo")
+sel=(open(ST+"/sd-model").read().strip() if os.path.exists(ST+"/sd-model") else "")
 expanded=os.path.exists(ST+"/sd-expanded")
 img=['  "modelctl.imgsep": {"icon":"","label":"────────────────","description":"","action":"true"},',
      '  "modelctl.sd": {"icon":"󰋩","label":"stable-diffusion","description":"Show model selection · bar 󰋩 generates with the selected one",'
@@ -47,14 +48,18 @@ if expanded:
     tbl=subprocess.run([SB+"/modelctl-image","--list"],
                        capture_output=True,text=True).stdout
     if not tbl.strip():
-        img.append('  "modelctl.sdnone": {"icon":"","label":"· No image models","description":"Add [sd:<id>] sections to ~/.config/modelctl/models.conf (see models.conf.example)","action":"true"},')
-    for line in tbl.splitlines():
-        mid,lab,desc,peak=line.split("|")
-        if int(peak)>9000: lab+=" (!)"  # may park the running LLM for the duration
-        img.append(f'  "modelctl.sd{mid}": {{"icon":"","label":{json.dumps(lab)},'
+        img.append('  "modelctl.sdnone": {"icon":"","label":"· No checkpoints found","description":"Put .safetensors/.gguf checkpoints (and their VAE / text encoders) under sd_dir in ~/.config/modelctl/models.conf","action":"true"},')
+    for i,line in enumerate(tbl.splitlines()):
+        mid,lab,desc,peak,status=(line.split("|")+["ok"])[:5]
+        if status!="ok": lab+=" (✗)"      # companions missing; row explains
+        elif int(peak)>9000: lab+=" (!)"  # may park the running LLM for the duration
+        key=re.sub(r"[^A-Za-z0-9_]","_",mid)
+        checked=(f'[ \\"$(cat ~/.local/state/modelctl/sd-model 2>/dev/null)\\" = {shlex_q(mid)} ]' if sel
+                 else ("true" if i==0 else "false"))   # nothing selected yet → the first (default) row
+        img.append(f'  "modelctl.sd_{key}": {{"icon":"","label":{json.dumps("· "+lab)},'
                    f'"description":{json.dumps(desc)},'
-                   f'"action":"{SB}/modelctl-sd select {mid}",'
-                   f'"checked":"[ \\"$(cat ~/.local/state/modelctl/sd-model 2>/dev/null)\\" = {mid} ]"}},')
+                   f'"action":{json.dumps(f"{SB}/modelctl-sd select {shlex_q(mid)}")},'
+                   f'"checked":{json.dumps(checked)}}},')
     img.append('  "modelctl.sdserver": {"icon":"","label":"· Keep loaded",'
                '"description":"Toggle a resident sd-server · without it each image loads fresh (~1.4s)",'
                '"action":"systemctl --user is-active --quiet modelctl@image.service '

@@ -6,9 +6,9 @@ D="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 ST="$HOME/.local/state/modelctl"; mkdir -p "$ST"
 case "${1:-}" in
   select)
-    "$D/modelctl-image" --list | grep -q "^${2:-turbo}|" || { echo "unknown model ${2:-}" >&2; exit 1; }
-    echo "${2:-turbo}" > "$ST/sd-model"
-    notify-send -a modelctl -i image "Image model" "Selected: ${2:-turbo}" ;;
+    id=$("$D/modelctl-image" --list | cut -d'|' -f1 | grep -xF -- "${2:-}") || { echo "unknown model ${2:-}" >&2; exit 1; }
+    echo "$id" > "$ST/sd-model"
+    notify-send -a modelctl -i image "Image model" "Selected: $id" ;;
   toggle-expand)
     if [ -e "$ST/sd-expanded" ]; then rm -f "$ST/sd-expanded"; else touch "$ST/sd-expanded"; fi ;;
   *) echo "usage: modelctl-sd select <id> | toggle-expand" >&2; exit 1 ;;

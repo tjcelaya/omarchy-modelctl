@@ -24,7 +24,7 @@ img="off"
 if systemctl --user is-active --quiet modelctl@image.service; then img="on"; fi
 
 ST="$HOME/.local/state/modelctl"
-sd=$(cat "$ST/sd-model" 2>/dev/null || echo turbo)
+sd=$(cat "$ST/sd-model" 2>/dev/null); sd="${sd:-$("$D/modelctl" sd-list 2>/dev/null | head -1 | cut -d'|' -f1)}"
 sdtag=$("$D/modelctl" sd-list 2>/dev/null | awk -F'|' -v id="$sd" '$1==id{print $9}')
 # A generation in flight: model, seconds elapsed, and the sampler's "n/N" if the log has one.
 busy=""; if [ -f "$ST/image.busy" ]; then
@@ -50,7 +50,7 @@ print(json.dumps({"state": os.environ.get("MC_STATE", "off"),
                   "free":  os.environ.get("MC_FREE", ""),
                   "unit":  os.environ.get("MC_UNIT", ""),
                   "image": os.environ.get("MC_IMG", "off") == "on",
-                  "sd":    os.environ.get("MC_SD", "turbo"),
+                  "sd":    os.environ.get("MC_SD", ""),
                   "sdtag": os.environ.get("MC_SDTAG", ""),
                   "busy":  (lambda b: {"model": b[0], "elapsed": int(b[1] or 0), "progress": b[2], "prompt": b[3]}
                             if b and b[0] else None)((os.environ.get("MC_BUSY", "") + "\t\t\t").split("\t")),

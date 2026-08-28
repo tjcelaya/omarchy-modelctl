@@ -3,8 +3,9 @@
 # GPU pool. Uses Omarchy's native input popup — gum in a floating terminal never
 # reliably got keyboard focus.
 #
-#   modelctl-image [--<id>] [prompt]        generate (prompt via popup if omitted)
-#   modelctl-image --list                   id|label|description|peak MiB used for parking
+#   modelctl-image [--<id>] [prompt]        generate (prompt via popup if omitted; id may be
+#                                           any unique substring, e.g. --chroma)
+#   modelctl-image --list                   id|label|description|peak MiB|status
 #   modelctl-image --checks                 results of previous --check runs
 #   modelctl-image --check <id> [--no-fa] [--res N] [--steps N] [--full]
 #       smoke-test a model: fixed prompt, 1 step at 512² unless overridden (--full =
@@ -25,23 +26,31 @@ istrue() { case "$(printf '%s' "$1" | tr 'A-Z' 'a-z')" in 1|true|yes|on) return 
 SD="${MODELCTL_SD_DIR:-$(conf sd_dir "$HOME/.local/share/stable-diffusion/models")}"
 notify() { notify-send -a modelctl "$@"; }
 
-# Model table: id | label | note | nominal peak GPU MiB | steps | cfg | res | sd-cli args — from the
-# [sd:<id>] sections of models.conf. The peak column is a conservative figure used only
-# to decide whether the running LLM must be parked; a native-res `--check --full` on
-# this machine replaces it.
+# Model table: id | label | note | peak MiB | steps | cfg | res | args | tag | status | family —
+# checkpoints discovered under sd_dir and classified by `modelctl sd-list` ([sd:<glob>]
+# sections in models.conf overlay them). Peak is an estimate from file sizes, used only
+# to decide whether the running LLM must be parked; a `--check --full` replaces it.
 models() { "$D/modelctl" sd-list; }
+
+# Resolve a user-typed id: exact, else the unique case-insensitive substring match.
+resolve() { local ids; ids=$(models | cut -d'|' -f1)
+  grep -qxF -- "$1" <<<"$ids" && { echo "$1"; return; }
+  local hits; hits=$(grep -iF -- "$1" <<<"$ids"); [ "$(grep -c . <<<"$hits")" = 1 ] && [ -n "$hits" ] && { echo "$hits"; return; }
+  return 1; }
+default_model() { models | head -1 | cut -d'|' -f1; }
 
 # Latest native-res check result for a model: "status<TAB>wall<TAB>peak", or nothing.
 last_check() { [ -f "$CHECKS" ] && awk -F'\t' -v id="$1" '$2==id && $3=="full"{r=$4"\t"$5"\t"$6} END{if(r)print r}' "$CHECKS"; }
 
 if [ "${1:-}" = --list ]; then
-  [ -n "$(models)" ] || { echo "no [sd:<id>] sections in ~/.config/modelctl/models.conf — see models.conf.example" >&2; exit 0; }
-  models | while IFS='|' read -r id lab desc peak _; do
+  [ -n "$(models)" ] || { echo "no checkpoints under $SD (models.conf sd_dir / MODELCTL_SD_DIR)" >&2; exit 0; }
+  models | while IFS='|' read -r id lab desc peak _ _ _ _ _ status _; do
     r=$(last_check "$id")
     if [ -n "$r" ]; then IFS=$'\t' read -r st wall pk <<<"$r"
       if [ "$st" = ok ]; then desc="$desc · ~${wall}s · ${pk} MiB"; peak=$pk; else desc="$desc · last check: $st"; fi
     fi
-    echo "$id|$lab|$desc|$peak"
+    [ "$status" = ok ] || desc="$desc · $status"
+    echo "$id|$lab|$desc|$peak|$status"
   done; exit 0
 fi
 if [ "${1:-}" = --checks ]; then
@@ -112,9 +121,10 @@ drop_lock() { exec 9>&-; }
 # ── --check: smoke-test a model ──────────────────────────────────────────────
 if [ "${1:-}" = --check ]; then
   istrue "$(conf sd_check false)" || { echo "modelctl-image --check is off: set sd_check = true under [defaults] in ~/.config/modelctl/models.conf" >&2; exit 2; }
-  MODEL="${2:?usage: --check <id> [--no-fa] [--res N] [--steps N] [--full]}"; shift 2
-  row=$(models | grep "^$MODEL|") || { echo "unknown model $MODEL" >&2; exit 1; }
-  IFS='|' read -r _ _ _ PEAK DEF_STEPS DEF_CFG DEF_RES ARGS _ <<<"$row"
+  MODEL=$(resolve "${2:?usage: --check <id> [--no-fa] [--res N] [--steps N] [--full]}") || { echo "unknown or ambiguous image model '$2' (see --list)" >&2; exit 1; }; shift 2
+  row=$(models | grep "^$MODEL|")
+  IFS='|' read -r _ _ _ PEAK DEF_STEPS DEF_CFG DEF_RES ARGS _ STATUS _ <<<"$row"
+  [ "$STATUS" = ok ] || { echo "$MODEL: $STATUS — put the companion files in $SD or set args= in an [sd:$MODEL] section" >&2; exit 1; }
   RES=512; STEPS=1; VARIANT=smoke
   while [ $# -gt 0 ]; do case "$1" in
     --no-fa)  ARGS=$(printf '%s\n' $ARGS | grep -vx -- '--diffusion-fa' | tr '\n' ' '); VARIANT="$VARIANT,no-fa"; shift ;;
@@ -136,17 +146,17 @@ if [ "${1:-}" = --check ]; then
 fi
 
 # ── generate ─────────────────────────────────────────────────────────────────
-SEL=$(cat "$ST/sd-model" 2>/dev/null || echo turbo)
-MODEL="${MODELCTL_SD_MODEL:-$SEL}"
+SEL=$(cat "$ST/sd-model" 2>/dev/null); SEL="${SEL:-$(default_model)}"
+WANT="${MODELCTL_SD_MODEL:-$SEL}"
 case "${1:-}" in
-  --sd15|--sd) MODEL=sd15; shift ;;
-  --turbo)     MODEL=turbo; shift ;;
-  --model)     MODEL="$2"; shift 2 ;;
-  --*)         MODEL="${1#--}"; shift ;;
+  --model) WANT="$2"; shift 2 ;;
+  --*)     WANT="${1#--}"; shift ;;
 esac
-row=$("$0" --list | grep "^$MODEL|") || { notify -u critical "Unknown image model" "$MODEL"; exit 1; }
-IFS='|' read -r _ _ _ PEAK <<<"$row"
-IFS='|' read -r _ _ _ _ DEF_STEPS DEF_CFG DEF_RES ARGS _ <<<"$(models | grep "^$MODEL|")"
+[ -n "$WANT" ] || { notify -u critical "No image models" "No checkpoints under $SD"; exit 1; }
+MODEL=$(resolve "$WANT") || { notify -u critical "Unknown image model" "'$WANT' matches none or several (modelctl-image --list)"; exit 1; }
+IFS='|' read -r _ _ _ PEAK _ <<<"$("$0" --list | grep "^$MODEL|")"
+IFS='|' read -r _ _ _ _ DEF_STEPS DEF_CFG DEF_RES ARGS _ STATUS _ <<<"$(models | grep "^$MODEL|")"
+[ "$STATUS" = ok ] || { notify -u critical "$MODEL is not runnable" "$STATUS · add the file(s) to $SD or set args= in [sd:$MODEL]"; exit 1; }
 # First path-ish token is the checkpoint; check it exists so failures are loud.
 CKPT=$(printf '%s\n' $ARGS | grep -m1 "^$SD/")
 [ -f "$CKPT" ] || { notify -u critical "Missing checkpoint" "$CKPT"; exit 1; }
@@ -186,7 +196,7 @@ fi
 unpark; drop_lock
 if [ "$RC" = 0 ] && [ -s "$f" ]; then
   notify -i "$f" "Image ready" "$(basename "$f") · ${WALL}s · peak ${PEAK_SEEN} MiB"
-  (uwsm-app -- imv "$f" >/dev/null 2>&1 || xdg-open "$f" >/dev/null 2>&1) &
+  (uwsm-app -- imv "$f" >/dev/null 2>&1 || xdg-open "$f" >/dev/null 2>&1) >/dev/null 2>&1 </dev/null &
 else
   notify -u critical "Generation failed ($MODEL)" "$MSG"
   echo "$MSG (log: $LOG)" >&2; exit 1

@@ -8,7 +8,7 @@
   modelctl image           resident sd-server (see MODELCTL_SD_DIR)
   modelctl show <id>       the exact llama-server command line, without running it
   modelctl conf <key> [default]   print a [defaults] value from models.conf (for the shell scripts)
-  modelctl sd-list         image models from the [sd:<id>] sections, as id|label|note|peak|steps|cfg|res|args|tag
+  modelctl sd-list         image models: id|label|note|peak|steps|cfg|res|args|tag|status|family
 
 Models are found under MODELCTL_MODEL_DIRS (colon-separated; default
 ~/.lmstudio/models:~/.cache/llama.cpp:~/models:~/.ollama/models), recursively,
@@ -21,8 +21,12 @@ Ollama itself is not involved and need not be running.
 Everything tunable is in ~/.config/modelctl/models.conf (INI). Nothing about a
 specific machine or model lives in this file. Example: models.conf.example.
 
-Image models are not discovered: each is an [sd:<id>] section (label, note, peak,
-steps, cfg, res, args; `$SD` in args expands to sd_dir).
+Image models are discovered the same way: every checkpoint under sd_dir is
+classified by family (SD 1.x, SD-Turbo, SDXL, SDXL-Lightning, Flux schnell/dev,
+Chroma, Z-Image, SD3) and paired with the VAE / text encoders that family needs,
+found in the same folder. [sd:<glob>] sections in models.conf overlay label, tag,
+note, peak, steps, cfg, res, extra (appended flags) or args (full replacement);
+a section that matches no file but has args= is a fully declared entry.
 """
 import configparser, fnmatch, json, os, re, shlex, sys
 
@@ -128,6 +132,129 @@ def discover(cp):
     return models
 
 
+# ── image models ──────────────────────────────────────────────────────────────
+SD_EXT = (".safetensors", ".gguf", ".ckpt")
+# Files that are never a model on their own: VAEs, text encoders, projectors.
+SD_COMPANION = re.compile(r"(^|[-_.])(ae|vae|t5|t5xxl|clip|clip_l|clip_g|qwen[0-9]*|llm|encoder|mmproj|umt5)([-_.]|$)", re.I)
+# Family by filename, first match wins. Everything unmatched is treated as SD 1.x.
+SD_FAMILY_RE = [
+    (r"chroma", "chroma"), (r"z[-_]?image", "zimage"),
+    (r"flux.*schnell|schnell", "flux-schnell"), (r"flux", "flux-dev"),
+    (r"(sdxl|sd_xl|xl).*(lightning|turbo)|(lightning|turbo).*(sdxl|sd_xl)", "sdxl-lightning"),
+    (r"sdxl|sd_xl", "sdxl"), (r"sd[-_]?turbo", "sd-turbo"),
+    (r"sd3|stable[-_]?diffusion[-_]?3", "sd3"),
+]
+# Per family: sampler defaults, how the checkpoint is passed, which companions it needs
+# (name -> filename regex) and which are optional. Flags are sd-cli's; nothing here is
+# a measurement.
+SD_FAMILY = {
+    "sd15":           dict(steps=20, cfg=7.0, res=512,  load="-m", flags="--type f16", needs={}, opt={}),
+    "sd-turbo":       dict(steps=4,  cfg=1.0, res=512,  load="-m", flags="--type f16", needs={}, opt={}),
+    "sdxl":           dict(steps=20, cfg=7.0, res=1024, load="-m", flags="--diffusion-fa --vae-tiling", needs={},
+                           opt={"vae": r"sdxl.*vae|vae.*(sdxl|xl)"}),
+    "sdxl-lightning": dict(steps=4,  cfg=1.0, res=1024, load="-m",
+                           flags="--sampling-method euler --scheduler sgm_uniform --diffusion-fa --vae-tiling",
+                           needs={}, opt={"vae": r"sdxl.*vae|vae.*(sdxl|xl)"}),
+    "flux-schnell":   dict(steps=4,  cfg=1.0, res=1024, load="--diffusion-model", flags="--diffusion-fa --vae-tiling",
+                           needs={"vae": r"^(flux_)?ae\b|flux.*ae", "t5xxl": r"t5.*xxl|t5xxl", "clip_l": r"clip_l"}, opt={}),
+    "flux-dev":       dict(steps=20, cfg=1.0, res=1024, load="--diffusion-model", flags="--diffusion-fa --vae-tiling",
+                           needs={"vae": r"^(flux_)?ae\b|flux.*ae", "t5xxl": r"t5.*xxl|t5xxl", "clip_l": r"clip_l"}, opt={}),
+    "chroma":         dict(steps=20, cfg=4.0, res=1024, load="--diffusion-model",
+                           flags="--sampling-method euler --diffusion-fa --vae-tiling",
+                           needs={"vae": r"^(flux_)?ae\b|flux.*ae", "t5xxl": r"t5.*xxl|t5xxl"}, opt={}),
+    "zimage":         dict(steps=8,  cfg=1.0, res=1024, load="--diffusion-model", flags="--diffusion-fa --vae-tiling",
+                           needs={"vae": r"^(flux_)?ae\b|flux.*ae", "llm": r"qwen3.*4b|qwen"}, opt={}),
+    "sd3":            dict(steps=28, cfg=4.5, res=1024, load="-m", flags="--vae-tiling",
+                           needs={"clip_l": r"clip_l", "clip_g": r"clip_g", "t5xxl": r"t5.*xxl|t5xxl"}, opt={}),
+}
+SD_TAG_RE = re.compile(r"[^a-z0-9]")
+
+
+def sd_dir(cp):
+    return os.path.expanduser(os.environ.get("MODELCTL_SD_DIR")
+                              or cp.get("defaults", "sd_dir", fallback=f"{HOME}/.local/share/stable-diffusion/models"))
+
+
+def sd_family(stem):
+    low = stem.lower()
+    for rx, fam in SD_FAMILY_RE:
+        if re.search(rx, low):
+            return fam
+    return "sd15"
+
+
+def sd_discover(cp):
+    """Every checkpoint under sd_dir, classified, with companions resolved and
+    [sd:<glob>] overlays applied; then any declared-only sections."""
+    root = sd_dir(cp)
+    files = []
+    if os.path.isdir(root):
+        for dp, _, fs in os.walk(root, followlinks=True):
+            for f in sorted(fs):
+                if f.endswith(SD_EXT):
+                    files.append(os.path.join(dp, f))
+    companions = [f for f in files if SD_COMPANION.search(os.path.basename(f))]
+    checkpoints = [f for f in files if f not in companions]
+
+    def pick(rx):
+        hits = [c for c in companions if re.search(rx, os.path.basename(c), re.I)]
+        return sorted(hits, key=lambda c: (-os.path.getsize(c), c))[0] if hits else ""
+
+    hide = [h for h in cp.get("defaults", "sd_hide", fallback="").split() if h]
+    seen, models = set(), []
+    for path in checkpoints:
+        stem = os.path.basename(path).rsplit(".", 1)[0]
+        mid = re.sub(r"[^A-Za-z0-9._:-]", "_", stem)
+        if mid in seen or any(fnmatch.fnmatchcase(mid, h) for h in hide):
+            continue
+        seen.add(mid)
+        fam = sd_family(stem); F = SD_FAMILY[fam]
+        parts, missing, size = [F["load"], path], [], os.path.getsize(path)
+        for name, rx in F["needs"].items():
+            c = pick(rx)
+            if c: parts += [f"--{name}", c]; size += os.path.getsize(c)
+            else: missing.append(name)
+        for name, rx in F["opt"].items():
+            c = pick(rx)
+            if c: parts += [f"--{name}", c]; size += os.path.getsize(c)
+        flags = F["flags"]
+        if F["load"] == "-m" and not path.endswith(".safetensors"):
+            flags = flags.replace("--type f16", "").strip()
+        # Nominal peak: the weights plus activation headroom that grows with the canvas.
+        # Only for deciding whether to park the LLM; a `--check --full` replaces it.
+        peak = int(size / 1048576 + (F["res"] / 512) ** 2 * 400)
+        c = {}
+        for sec in cp.sections():
+            if sec.startswith("sd:") and fnmatch.fnmatchcase(mid, sec[3:].strip()):
+                c.update(cp[sec])
+        if c.get("hide", "").lower() in ("1", "true", "yes"):
+            continue
+        args = c["args"].replace("$SD", root) if c.get("args") else shlex.join(parts) + " " + flags
+        if c.get("extra"): args += " " + c["extra"].replace("$SD", root)
+        label = c.get("label") or QUANT_RE.sub("", stem)
+        models.append({
+            "id": mid, "label": label, "family": fam, "peak": c.get("peak", str(peak)),
+            "steps": c.get("steps", str(F["steps"])), "cfg": c.get("cfg", str(F["cfg"])), "res": c.get("res", str(F["res"])),
+            "note": c.get("note") or f"{fam} · {c.get('res', F['res'])}² · {c.get('steps', F['steps'])} steps",
+            "args": args, "tag": c.get("tag") or SD_TAG_RE.sub("", label.lower())[:5],
+            "status": "ok" if (c.get("args") or not missing) else "missing " + ",".join(missing),
+        })
+    # Declared-only sections: a name that is not a glob over any file, with args=.
+    for sec in cp.sections():
+        if not sec.startswith("sd:"):
+            continue
+        mid = sec[3:].strip(); c = cp[sec]
+        if not c.get("args") or any(fnmatch.fnmatchcase(m["id"], mid) for m in models) or mid in seen:
+            continue
+        seen.add(mid)
+        models.append({"id": mid, "label": c.get("label", mid), "family": c.get("family", "declared"),
+                       "peak": c.get("peak", "8000"), "steps": c.get("steps", "20"), "cfg": c.get("cfg", "7.0"),
+                       "res": c.get("res", "512"), "note": c.get("note", ""), "args": c["args"].replace("$SD", root),
+                       "tag": c.get("tag") or SD_TAG_RE.sub("", mid.lower())[:5], "status": "ok"})
+    models.sort(key=lambda m: (m["status"] != "ok", m["label"].lower()))
+    return models
+
+
 def find(models, key):
     for m in models:
         if m["id"] == key or m["label"] == key:
@@ -155,19 +282,14 @@ def main(argv):
         v = cp.get("defaults", argv[1], fallback=argv[2] if len(argv) > 2 else "")
         print(os.path.expanduser(v)); return
     if cmd == "sd-list":
-        sd = os.path.expanduser(os.environ.get("MODELCTL_SD_DIR") or cp.get("defaults", "sd_dir", fallback=f"{HOME}/.local/share/stable-diffusion/models"))
-        for sec in cp.sections():
-            if not sec.startswith("sd:"):
-                continue
-            c = cp[sec]; mid = sec[3:].strip()
-            print("|".join([mid, c.get("label", mid), c.get("note", ""), c.get("peak", "8000"), c.get("steps", "20"),
-                            c.get("cfg", "7.0"), c.get("res", "512"), c.get("args", "").replace("$SD", sd),
-                            c.get("tag", mid[:5])]))
+        for m in sd_discover(cp):
+            print("|".join([m["id"], m["label"], m["note"], m["peak"], m["steps"], m["cfg"], m["res"], m["args"],
+                            m["tag"], m["status"], m["family"]]))
         return
     if cmd == "image":
-        sd = os.environ.get("MODELCTL_SD_DIR", cp.get("defaults", "sd_dir", fallback=f"{HOME}/.local/share/stable-diffusion/models"))
+        sd = sd_dir(cp)
         ck = cp.get("defaults", "sd_server_model", fallback="sd_turbo.safetensors")
-        os.execvp("sd-server", ["sd-server", "-m", os.path.join(os.path.expanduser(sd), ck), "--type", "f16",
+        os.execvp("sd-server", ["sd-server", "-m", os.path.join(sd, ck), "--type", "f16",
                                 "--listen-ip", "127.0.0.1", "--listen-port", os.environ.get("MODELCTL_SD_PORT", "8091")] + argv[1:])
     models = discover(cp)
     if cmd == "list":
