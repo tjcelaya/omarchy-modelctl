@@ -27,11 +27,11 @@ mrows=[]
 for line in subprocess.run([SB+"/modelctl","list","--tsv"],capture_output=True,text=True).stdout.splitlines():
     mid,label,tag,ctx,note,path,vis=(line.split("\t")+[""]*7)[:7]
     desc=" · ".join(x for x in [f"{int(ctx)//1024}k ctx", "vision" if vis=="1" else "", note] if x)
-    mrows.append('  "modelctl.m.%s": {"icon":"","label":%s,"description":%s,"action":%s,"checked":%s},'
+    mrows.append('  "modelctl.m_%s": {"icon":"","label":%s,"description":%s,"action":%s,"checked":%s},'
         % (re.sub(r"[^A-Za-z0-9_]","_",mid), json.dumps(label,ensure_ascii=False), json.dumps(desc,ensure_ascii=False),
            json.dumps(f"{SB}/modelctl-switch {mid}"), json.dumps(f"systemctl --user is-active --quiet 'modelctl@{mid}.service'")))
 if not mrows:
-    mrows.append('  "modelctl.m.none": {"icon":"","label":"No GGUF models found","description":"Set MODELCTL_MODEL_DIRS or pull one with LM Studio / Ollama","action":"true"},')
+    mrows.append('  "modelctl.m_none": {"icon":"","label":"No GGUF models found","description":"Set MODELCTL_MODEL_DIRS or pull one with LM Studio / Ollama","action":"true"},')
 s=s.replace("// @MODEL_ROWS@","\n".join(mrows))
 
 # ── image section (own section; separator below is the static modelctl.sep) ──
@@ -62,8 +62,7 @@ if expanded:
                '|| systemctl --user start modelctl@image.service",'
                '"checked":"systemctl --user is-active --quiet modelctl@image.service"},')
 s=s.replace("// @IMAGE_SECTION@","\n".join(img))
-extra=['  "modelctl.agentsep": {"icon":"","label":"────────────────","description":"","action":"true"},',
-       # Own submenu so the bar badge can summon it directly (`omarchy menu summon modelctl.agents`).
+extra=[# Own submenu so the bar badge can summon it directly (`omarchy menu summon modelctl.agents`).
        '  "modelctl.agents": {"icon":"\U000f018d","label":"Agents (%d)","description":"Running coding agents · select one to focus it","aliases":["agents","panes"]},' % len(rows)]
 j=lambda v: json.dumps(v, ensure_ascii=False)
 if not rows:
@@ -78,10 +77,9 @@ for i,r in enumerate(rows):
     aliases=[agent,cwd]+[seg for seg in cwd.replace("~","").split("/") if seg]
     extra.append('  "modelctl.agents.%d": {"icon":"\U000f10d2","label":%s,"description":%s,"aliases":%s,"action":%s},'
         % (i, j(f"{agent} · {short}{mark}"), j(f"{cwd} · {status} · {pane}"), j(aliases), j(focus or "true")))
-body=s.rstrip().rstrip("}").rstrip().rstrip(",")
-tail="\n".join(extra).rstrip(",")
+s=s.replace("// @AGENT_ROWS@","\n".join(extra))
 import re
-ours=json.loads(re.sub(r'^\s*//.*$','',body + (",\n" if extra else "\n") + tail + "\n}\n",flags=re.M))
+ours=json.loads(re.sub(r'^\s*//.*$','',s,flags=re.M))
 # The shell reads ONE user extension file. Keep every entry that is not ours so
 # other extensions survive a regeneration; ours are all keyed modelctl*.
 ext=os.path.expanduser("~/.config/omarchy/extensions/omarchy-menu.jsonc")

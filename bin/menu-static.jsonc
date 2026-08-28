@@ -9,14 +9,12 @@
   },
 
   // @MODEL_ROWS@
-  // @IMAGE_SECTION@
   "modelctl.sep": {
     "icon": "",
     "label": "────────────────",
     "description": "",
     "action": "true"
   },
-
   "modelctl.stop": {
     "icon": "",
     "label": "Stop server",
@@ -24,6 +22,8 @@
     "action": "@BIN@/modelctl-stop",
     "when": "systemctl --user is-active --quiet modelctl.service || systemctl --user list-units --plain --no-legend 'modelctl@*.service' | grep -q active"
   },
+  // @AGENT_ROWS@
+  // @IMAGE_SECTION@
   "modelctl.lmstudio": {
     "icon": "",
     "label": "Open LM Studio",
