@@ -31,7 +31,7 @@ for line in subprocess.run([SB+"/modelctl","list","--tsv"],capture_output=True,t
         % (re.sub(r"[^A-Za-z0-9_]","_",mid), json.dumps(label,ensure_ascii=False), json.dumps(desc,ensure_ascii=False),
            json.dumps(f"{SB}/modelctl-switch {mid}"), json.dumps(f"systemctl --user is-active --quiet 'modelctl@{mid}.service'")))
 if not mrows:
-    mrows.append('  "modelctl.m_none": {"icon":"","label":"No GGUF models found","description":"Set MODELCTL_MODEL_DIRS or pull one with LM Studio / Ollama","action":"true"},')
+    mrows.append('  "modelctl.m_none": {"icon":"","label":"No GGUF models found","description":"Set MODELCTL_MODEL_DIRS, or pull one with LM Studio or Ollama","action":"true"},')
 s=s.replace("// @MODEL_ROWS@","\n".join(mrows))
 
 # ── image section (own section; separator below is the static modelctl.sep) ──
@@ -79,7 +79,8 @@ for i,r in enumerate(rows):
         % (i, j(f"{agent} · {short}{mark}"), j(f"{cwd} · {status} · {pane}"), j(aliases), j(focus or "true")))
 s=s.replace("// @AGENT_ROWS@","\n".join(extra))
 import re
-ours=json.loads(re.sub(r'^\s*//.*$','',s,flags=re.M))
+# Generated sections end with a comma; tolerate it wherever the section lands.
+ours=json.loads(re.sub(r',(\s*[}\]])',r'\1',re.sub(r'^\s*//.*$','',s,flags=re.M)))
 # The shell reads ONE user extension file. Keep every entry that is not ours so
 # other extensions survive a regeneration; ours are all keyed modelctl*.
 ext=os.path.expanduser("~/.config/omarchy/extensions/omarchy-menu.jsonc")

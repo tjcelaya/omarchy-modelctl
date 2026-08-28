@@ -24,11 +24,4 @@
   },
   // @AGENT_ROWS@
   // @IMAGE_SECTION@
-  "modelctl.lmstudio": {
-    "icon": "",
-    "label": "Open LM Studio",
-    "description": "Browse and download GGUF models",
-    "action": "uwsm-app -- lm-studio",
-    "when": "command -v lm-studio"
-  }
 }
