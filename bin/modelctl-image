@@ -114,7 +114,7 @@ if [ "${1:-}" = --check ]; then
   istrue "$(conf sd_check false)" || { echo "modelctl-image --check is off: set sd_check = true under [defaults] in ~/.config/modelctl/models.conf" >&2; exit 2; }
   MODEL="${2:?usage: --check <id> [--no-fa] [--res N] [--steps N] [--full]}"; shift 2
   row=$(models | grep "^$MODEL|") || { echo "unknown model $MODEL" >&2; exit 1; }
-  IFS='|' read -r _ _ _ PEAK DEF_STEPS DEF_CFG DEF_RES ARGS <<<"$row"
+  IFS='|' read -r _ _ _ PEAK DEF_STEPS DEF_CFG DEF_RES ARGS _ <<<"$row"
   RES=512; STEPS=1; VARIANT=smoke
   while [ $# -gt 0 ]; do case "$1" in
     --no-fa)  ARGS=$(printf '%s\n' $ARGS | grep -vx -- '--diffusion-fa' | tr '\n' ' '); VARIANT="$VARIANT,no-fa"; shift ;;
@@ -146,7 +146,7 @@ case "${1:-}" in
 esac
 row=$("$0" --list | grep "^$MODEL|") || { notify -u critical "Unknown image model" "$MODEL"; exit 1; }
 IFS='|' read -r _ _ _ PEAK <<<"$row"
-IFS='|' read -r _ _ _ _ DEF_STEPS DEF_CFG DEF_RES ARGS <<<"$(models | grep "^$MODEL|")"
+IFS='|' read -r _ _ _ _ DEF_STEPS DEF_CFG DEF_RES ARGS _ <<<"$(models | grep "^$MODEL|")"
 # First path-ish token is the checkpoint; check it exists so failures are loud.
 CKPT=$(printf '%s\n' $ARGS | grep -m1 "^$SD/")
 [ -f "$CKPT" ] || { notify -u critical "Missing checkpoint" "$CKPT"; exit 1; }
