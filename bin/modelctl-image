@@ -6,6 +6,7 @@
 #   modelctl-image [--<id>] [prompt]        generate (prompt via popup if omitted; id may be
 #                                           any unique substring, e.g. --chroma)
 #   modelctl-image --list                   id|label|description|peak MiB|status
+#   modelctl-image --resolve <key>          print the id a key resolves to (exit 1 if none/ambiguous)
 #   modelctl-image --checks                 results of previous --check runs
 #   modelctl-image --check <id> [--no-fa] [--res N] [--steps N] [--full]
 #       smoke-test a model: fixed prompt, 1 step at 512² unless overridden (--full =
@@ -32,11 +33,13 @@ notify() { notify-send -a modelctl "$@"; }
 # to decide whether the running LLM must be parked; a `--check --full` replaces it.
 models() { "$D/modelctl" sd-list; }
 
-# Resolve a user-typed id: exact, else the unique case-insensitive substring match.
-resolve() { local ids; ids=$(models | cut -d'|' -f1)
-  grep -qxF -- "$1" <<<"$ids" && { echo "$1"; return; }
-  local hits; hits=$(grep -iF -- "$1" <<<"$ids"); [ "$(grep -c . <<<"$hits")" = 1 ] && [ -n "$hits" ] && { echo "$hits"; return; }
-  return 1; }
+# Resolve a user-typed id: exact id, exact tag, unique case-insensitive substring of an
+# id, then of a label. So `--chroma` finds Chroma1-HD-Q8_0 and a `tag = turbo` overlay
+# keeps `--turbo` unambiguous next to z_image_turbo.
+resolve() { models | awk -F'|' -v k="$1" '
+  $1==k {print $1; found=1; exit}
+  { if ($9==k) tag=$1; if (index(tolower($1),tolower(k))) {ni++; id=$1}; if (index(tolower($2),tolower(k))) {nl++; lb=$1} }
+  END { if (found) exit 0; if (tag) print tag; else if (ni==1) print id; else if (nl==1) print lb; else exit 1 }'; }
 default_model() { models | head -1 | cut -d'|' -f1; }
 
 # Latest native-res check result for a model: "status<TAB>wall<TAB>peak", or nothing.
@@ -53,6 +56,7 @@ if [ "${1:-}" = --list ]; then
     echo "$id|$lab|$desc|$peak|$status"
   done; exit 0
 fi
+if [ "${1:-}" = --resolve ]; then resolve "${2:-}"; exit; fi
 if [ "${1:-}" = --checks ]; then
   if [ -f "$CHECKS" ]; then column -ts $'\t' "$CHECKS"
   else echo "no checks recorded (models.conf: sd_check = true, then modelctl-image --check <id>)"; fi; exit 0
