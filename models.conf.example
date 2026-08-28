@@ -54,3 +54,67 @@ ctx = 32768
 label = qwen3-4b
 tag = q4
 note = 29 tok/s · quick chat
+
+# ── image models ──────────────────────────────────────────────────────────────
+# One [sd:<id>] section per checkpoint for modelctl-image; the id is what the menu
+# and `modelctl-image --<id>` use. `$SD` in args expands to sd_dir. Keys:
+#   label  menu label            note   short menu description
+#   peak   nominal peak GPU MiB (parks the running LLM if it would not fit; replaced by
+#          a native-res `modelctl-image --check <id> --full` on your machine)
+#   steps / cfg / res   defaults for --steps, --cfg-scale and -W/-H
+#   args   everything else sd-cli needs (checkpoint, VAE, text encoders, flags)
+# Delete the ones you do not have; peaks below are rough placeholders, not measurements.
+
+[sd:turbo]
+label = · Turbo
+note = 512² · 4 steps · drafts
+peak = 4500
+steps = 4
+cfg = 1.0
+res = 512
+args = -m $SD/sd_turbo.safetensors --type f16
+
+[sd:sd15]
+label = · SD 1.5
+note = 512² · 20 steps · steers harder
+peak = 4000
+steps = 20
+cfg = 7.0
+res = 512
+args = -m $SD/v1-5-pruned-emaonly-fp16.safetensors --type f16
+
+[sd:sdxl]
+label = · SDXL-Lightning
+note = 1024² · 4 steps
+peak = 7600
+steps = 4
+cfg = 1.0
+res = 1024
+args = -m $SD/sdxl_lightning_4step.safetensors --vae $SD/sdxl_vae_fp16_fix.safetensors --sampling-method euler --scheduler sgm_uniform --diffusion-fa --vae-tiling
+
+[sd:zimage]
+label = · Z-Image-Turbo
+note = 1024² · 8 steps · Qwen3-4B text encoder
+peak = 11600
+steps = 8
+cfg = 1.0
+res = 1024
+args = --diffusion-model $SD/z_image_turbo-Q8_0.gguf --vae $SD/flux_ae.safetensors --llm $SD/Qwen3-4B-Instruct-2507-Q8_0.gguf --diffusion-fa --vae-tiling
+
+[sd:flux]
+label = · Flux.1-schnell
+note = 1024² · 4 steps · T5-XXL text encoder
+peak = 18600
+steps = 4
+cfg = 1.0
+res = 1024
+args = --diffusion-model $SD/flux1-schnell-Q8_0.gguf --vae $SD/flux_ae.safetensors --clip_l $SD/clip_l.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --diffusion-fa --vae-tiling
+
+[sd:chroma]
+label = · Chroma1-HD
+note = 1024² · 20 steps · T5-XXL text encoder
+peak = 15600
+steps = 20
+cfg = 4.0
+res = 1024
+args = --diffusion-model $SD/Chroma1-HD-Q8_0.gguf --vae $SD/flux_ae.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --sampling-method euler --diffusion-fa --vae-tiling

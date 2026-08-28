@@ -46,6 +46,8 @@ img=['  "modelctl.imgsep": {"icon":"","label":"───────────
 if expanded:
     tbl=subprocess.run([SB+"/modelctl-image","--list"],
                        capture_output=True,text=True).stdout
+    if not tbl.strip():
+        img.append('  "modelctl.sdnone": {"icon":"","label":"· No image models","description":"Add [sd:<id>] sections to ~/.config/modelctl/models.conf (see models.conf.example)","action":"true"},')
     for line in tbl.splitlines():
         mid,lab,desc,peak=line.split("|")
         if int(peak)>9000: lab+=" (!)"  # may park the running LLM for the duration

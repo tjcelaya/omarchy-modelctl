@@ -8,6 +8,7 @@
   modelctl image           resident sd-server (see MODELCTL_SD_DIR)
   modelctl show <id>       the exact llama-server command line, without running it
   modelctl conf <key> [default]   print a [defaults] value from models.conf (for the shell scripts)
+  modelctl sd-list         image models from the [sd:<id>] sections, as id|label|note|peak|steps|cfg|res|args
 
 Models are found under MODELCTL_MODEL_DIRS (colon-separated; default
 ~/.lmstudio/models:~/.cache/llama.cpp:~/models:~/.ollama/models), recursively,
@@ -19,6 +20,9 @@ Ollama itself is not involved and need not be running.
 
 Everything tunable is in ~/.config/modelctl/models.conf (INI). Nothing about a
 specific machine or model lives in this file. Example: models.conf.example.
+
+Image models are not discovered: each is an [sd:<id>] section (label, note, peak,
+steps, cfg, res, args; `$SD` in args expands to sd_dir).
 """
 import configparser, fnmatch, json, os, re, shlex, sys
 
@@ -150,6 +154,15 @@ def main(argv):
         # Shell helpers read their settings through here so the INI stays the one source.
         v = cp.get("defaults", argv[1], fallback=argv[2] if len(argv) > 2 else "")
         print(os.path.expanduser(v)); return
+    if cmd == "sd-list":
+        sd = os.path.expanduser(os.environ.get("MODELCTL_SD_DIR") or cp.get("defaults", "sd_dir", fallback=f"{HOME}/.local/share/stable-diffusion/models"))
+        for sec in cp.sections():
+            if not sec.startswith("sd:"):
+                continue
+            c = cp[sec]; mid = sec[3:].strip()
+            print("|".join([mid, c.get("label", mid), c.get("note", ""), c.get("peak", "8000"), c.get("steps", "20"),
+                            c.get("cfg", "7.0"), c.get("res", "512"), c.get("args", "").replace("$SD", sd)]))
+        return
     if cmd == "image":
         sd = os.environ.get("MODELCTL_SD_DIR", cp.get("defaults", "sd_dir", fallback=f"{HOME}/.local/share/stable-diffusion/models"))
         ck = cp.get("defaults", "sd_server_model", fallback="sd_turbo.safetensors")

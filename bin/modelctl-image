@@ -13,7 +13,7 @@
 #       Off unless models.conf [defaults] sd_check = true.
 #
 # models.conf [defaults] keys used here:
-#   sd_dir          checkpoint folder
+#   sd_dir          checkpoint folder ($SD in [sd:*] args)
 #   sd_check        true → enable --check (default false)
 #   sd_retry_no_fa  true → after a GPU device-lost, retry once without --diffusion-fa
 set -uo pipefail
@@ -25,23 +25,17 @@ istrue() { case "$(printf '%s' "$1" | tr 'A-Z' 'a-z')" in 1|true|yes|on) return 
 SD="${MODELCTL_SD_DIR:-$(conf sd_dir "$HOME/.local/share/stable-diffusion/models")}"
 notify() { notify-send -a modelctl "$@"; }
 
-# Model table: id | label | description | nominal peak GPU MiB | steps | cfg | res | sd-cli args
-# The peak column is a conservative nominal figure used only to decide whether the
-# running LLM must be parked; a native-res `--check --full` on this machine replaces it.
-models() { cat <<TABLE
-turbo|· Turbo|512² · 4 steps · drafts|4500|4|1.0|512|-m $SD/sd_turbo.safetensors --type f16
-sd15|· SD 1.5|512² · 20 steps · steers harder|4000|20|7.0|512|-m $SD/v1-5-pruned-emaonly-fp16.safetensors --type f16
-sdxl|· SDXL-Lightning|1024² · 4 steps|7600|4|1.0|1024|-m $SD/sdxl_lightning_4step.safetensors --vae $SD/sdxl_vae_fp16_fix.safetensors --sampling-method euler --scheduler sgm_uniform --diffusion-fa --vae-tiling
-zimage|· Z-Image-Turbo|1024² · 8 steps · Qwen3-4B text encoder|11600|8|1.0|1024|--diffusion-model $SD/z_image_turbo-Q8_0.gguf --vae $SD/flux_ae.safetensors --llm $SD/Qwen3-4B-Instruct-2507-Q8_0.gguf --diffusion-fa --vae-tiling
-flux|· Flux.1-schnell|1024² · 4 steps · T5-XXL text encoder|18600|4|1.0|1024|--diffusion-model $SD/flux1-schnell-Q8_0.gguf --vae $SD/flux_ae.safetensors --clip_l $SD/clip_l.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --diffusion-fa --vae-tiling
-chroma|· Chroma1-HD|1024² · 20 steps · T5-XXL text encoder|15600|20|4.0|1024|--diffusion-model $SD/Chroma1-HD-Q8_0.gguf --vae $SD/flux_ae.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --sampling-method euler --diffusion-fa --vae-tiling
-TABLE
-}
+# Model table: id | label | note | nominal peak GPU MiB | steps | cfg | res | sd-cli args — from the
+# [sd:<id>] sections of models.conf. The peak column is a conservative figure used only
+# to decide whether the running LLM must be parked; a native-res `--check --full` on
+# this machine replaces it.
+models() { "$D/modelctl" sd-list; }
 
 # Latest native-res check result for a model: "status<TAB>wall<TAB>peak", or nothing.
 last_check() { [ -f "$CHECKS" ] && awk -F'\t' -v id="$1" '$2==id && $3=="full"{r=$4"\t"$5"\t"$6} END{if(r)print r}' "$CHECKS"; }
 
 if [ "${1:-}" = --list ]; then
+  [ -n "$(models)" ] || { echo "no [sd:<id>] sections in ~/.config/modelctl/models.conf — see models.conf.example" >&2; exit 0; }
   models | while IFS='|' read -r id lab desc peak _; do
     r=$(last_check "$id")
     if [ -n "$r" ]; then IFS=$'\t' read -r st wall pk <<<"$r"

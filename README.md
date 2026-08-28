@@ -28,11 +28,14 @@ Prompts via Omarchy's native input popup, saves to `~/Pictures/generated` as
 `<timestamp>-<prompt-slug>.png`, then opens it. Override the folder with
 `MODELCTL_IMAGE_DIR` or the `imageDir` setting; `SD_STEPS`, `SD_W`, `SD_H` tune the rest.
 
-Models (`modelctl-image --list`; pick in the menu or `modelctl-image --<id> "prompt"`):
-`turbo` SD-Turbo 512², `sd15` SD 1.5 512², `sdxl` SDXL-Lightning 1024², `zimage`
-Z-Image-Turbo Q8 1024², `flux` Flux.1-schnell Q8 1024², `chroma` Chroma1-HD Q8 1024².
-Nothing here is measured for you: run `--check` (below) and the menu shows the wall
-time and peak GPU use from *your* hardware.
+Image models are `[sd:<id>]` sections in `~/.config/modelctl/models.conf` — label,
+note, nominal peak MiB, default steps/cfg/res and the sd-cli args (`$SD` = `sd_dir`).
+`models.conf.example` ships six (SD-Turbo, SD 1.5, SDXL-Lightning, Z-Image-Turbo,
+Flux.1-schnell, Chroma1-HD); keep the ones you have, tune flags per model there
+(e.g. drop `--diffusion-fa` for one that hangs your GPU). `modelctl-image --list`
+shows them; pick in the menu or `modelctl-image --<id> "prompt"`. Nothing is measured
+for you: run `--check` (below) and the menu shows the wall time and peak GPU use
+from *your* hardware.
 
 Before generating, the script reads the amdgpu memory counters; if the model's peak
 would not fit next to what is loaded, it stops the running `modelctl@*` LLM unit and
