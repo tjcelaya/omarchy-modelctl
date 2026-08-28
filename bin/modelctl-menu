@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Open the model menu, guaranteeing its agent rows match herdr at the moment of
-# opening. The 5s bar poll keeps the badge live; this closes the gap for the menu.
+# `modelctl-menu` toggles the bar dropdown; `modelctl-menu agents` opens the agents
+# submenu in the Omarchy menu (searchable, with the rows synced right now).
 set -u
 D="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-"$D/modelctl-menu-sync" --force >/dev/null 2>&1
-# `modelctl-menu agents` jumps straight to the agents submenu.
-exec omarchy menu summon "modelctl${1:+.$1}"
+if [ "${1:-}" = agents ]; then
+  "$D/modelctl-menu-sync" --force >/dev/null 2>&1
+  exec omarchy menu summon modelctl.agents
+fi
+exec omarchy shell tjcelaya.modelctl toggle

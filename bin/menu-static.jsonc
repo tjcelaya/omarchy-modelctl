@@ -1,27 +1,12 @@
 {
-  // modelctl — local model server (llama.cpp on :8090).
-  // Opened by the 󰚩 bar widget. Separate from Omarchy's agents widget (Claude usage).
+  // modelctl — the quick menu only carries a launcher for the bar dropdown and the
+  // agents submenu (searchable by name and path, summoned by the bar badge).
   "modelctl": {
     "icon": "󰚩",
     "label": "Local models",
-    "aliases": ["models"],
-    "description": "Load a local GGUF model for opencode"
-  },
-
-  // @MODEL_SECTION@
-  // @IMAGE_SECTION@
-  "modelctl.sep": {
-    "icon": "",
-    "label": "────────────────",
-    "description": "",
-    "action": "true"
-  },
-  "modelctl.stop": {
-    "icon": "",
-    "label": "Stop LLM server",
-    "description": "Unload the running llama-server and release the GPU pool",
-    "action": "@BIN@/modelctl-stop",
-    "when": "systemctl --user is-active --quiet modelctl.service || systemctl --user list-units --plain --no-legend 'modelctl@*.service' | grep -q active"
+    "aliases": ["models", "llm", "stable-diffusion"],
+    "description": "Open the modelctl dropdown: LLMs, image models, agents",
+    "action": "omarchy shell tjcelaya.modelctl toggle"
   },
   // @AGENT_ROWS@
 }

@@ -7,11 +7,11 @@ running [herdr](https://github.com/tjcelaya/herdr) coding agent at a glance.
 
     󰚩oss20  󰋩  󱃒2
 
-- **Model** (`󰚩` + abbreviation) — left-click for the model menu, middle-click stops
+- **Model** (`󰚩` + abbreviation) — left-click opens the dropdown, middle-click stops
   the server, right-click tails its journal.
-- **Images** (`󰋩`) — left-click (tag = selected model) generates one image with the model selected in the
-  menu's `stable-diffusion` section; right-click toggles a resident SD-Turbo
-  `sd-server` on :8091. Dim = one-shot, bright = resident.
+- **Images** (`󰋩` + tag of the selected model, or `chrm 37%` while one is generating) —
+  left-click opens the dropdown, right-click generates an image with the selected model.
+  Dim = one-shot, bright = resident `sd-server`.
 - **Agents** (`󱃒` + count; glyph via the `agentsIcon` setting) — dim with no
   number when nothing is running, lit with a count otherwise. Click opens the agents
   submenu: every running coding agent with its directory and status; selecting one
@@ -131,13 +131,17 @@ its manifests and each pulled `name:tag` is served straight from its GGUF blob
 projectors are attached automatically, sharded models start from shard 1, and the
 menu regenerates from the scan every time it opens.
 
-### Menu layout
+### The dropdown
 
-The `Local models` card has a `llama.cpp` section and a `stable-diffusion` section,
-then `Stop server` and `Agents` as a footer. `menu_layout` under `[defaults]` in
-`models.conf` picks the shape: `headers` (default — icon header rows, each collapsible,
-bulleted models under them), `flat` (no headers, plain rows, one separator) or
-`submenus` (each section is its own submenu, shortest card).
+Clicking any of the three bar segments opens one panel, built from the same kit as
+Omarchy's Bluetooth and Wi-Fi dropdowns: a hero with the loaded model and an on/off
+switch for the LLM server, the `llama.cpp` list (click to load, check on the loaded
+one), the `stable-diffusion` list (click to select for the 󰋩 button; `parks the LLM`
+where the peak would not fit; greyed out with the missing companion file), a
+*Keep image server loaded* toggle, *Generate image…*, and the running agents (click to
+focus). `Esc` closes, `g` generates, `s` toggles the server. `omarchy shell
+tjcelaya.modelctl toggle` opens it from anywhere. The Omarchy quick menu keeps only a
+launcher entry and the searchable **Agents** submenu.
 
 ### Tuning: `~/.config/modelctl/models.conf`
 

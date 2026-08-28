@@ -12,7 +12,7 @@ j() { printf '{"text":"%s","tooltip":"%s","class":"%s"}\n' "$1" "$2" "$3"; }
 HINT='Left-click: menu  ·  Middle-click: stop  ·  Right-click: logs'
 
 active=""
-for u in modelctl.service $(systemctl --user list-units --plain --no-legend 'modelctl@*.service' 2>/dev/null | awk '{print $1}'); do
+for u in modelctl.service $(systemctl --user list-units --plain --no-legend 'modelctl@*.service' 2>/dev/null | awk '{print $1}' | grep -v '@image'); do
   systemctl --user is-active --quiet "$u" && { active="$u"; break; }
 done
 

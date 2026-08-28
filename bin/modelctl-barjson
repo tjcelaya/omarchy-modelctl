@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Compact state for the QML bar module: loaded model + every herdr agent.
+# One JSON document for the bar widget and its dropdown: server state, every
+# discovered LLM and image model, the image generation in flight, every agent.
 set -u
 PORT="${MODELCTL_PORT:-8090}"
 D="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+ST="$HOME/.local/state/modelctl"
 
 active=""
-for u in modelctl.service $(systemctl --user list-units --plain --no-legend 'modelctl@*.service' 2>/dev/null | awk '{print $1}'); do
+for u in modelctl.service $(systemctl --user list-units --plain --no-legend 'modelctl@*.service' 2>/dev/null | awk '{print $1}' | grep -v '@image'); do
   if systemctl --user is-active --quiet "$u"; then active="$u"; break; fi
 done
 
@@ -19,40 +21,46 @@ if [ -n "$active" ]; then
     state="loading"
   fi
 fi
-tag=$("$D/modelctl" list --tsv 2>/dev/null | awk -F'\t' -v a="$model" '$2==a{print $3}')
-img="off"
-if systemctl --user is-active --quiet modelctl@image.service; then img="on"; fi
+# The unit instance is the model id; the served alias is the label.
+unit_id="${active#modelctl@}"; unit_id="${unit_id%.service}"; [ "$unit_id" = "modelctl.service" ] && unit_id=""
+img="off"; systemctl --user is-active --quiet modelctl@image.service && img="on"
 
-ST="$HOME/.local/state/modelctl"
 sd=$(cat "$ST/sd-model" 2>/dev/null); sd="${sd:-$("$D/modelctl" sd-list 2>/dev/null | head -1 | cut -d'|' -f1)}"
-sdtag=$("$D/modelctl" sd-list 2>/dev/null | awk -F'|' -v id="$sd" '$1==id{print $9}')
 # A generation in flight: model, seconds elapsed, and the sampler's "n/N" if the log has one.
 busy=""; if [ -f "$ST/image.busy" ]; then
-  IFS=$'\t' read -r bmodel bstart blog bprompt < "$ST/image.busy"
+  IFS=$'\t' read -r bmodel bstart blog bprompt _ < "$ST/image.busy"
   if [ -f "$blog" ]; then prog=$(tail -c 4000 "$blog" 2>/dev/null | tr '\r' '\n' | grep -oE '[0-9]+/[0-9]+ -' | tail -1 | cut -d' ' -f1); else prog=""; fi
   busy="$bmodel"$'\t'"$(( $(date +%s) - bstart ))"$'\t'"${prog:-}"$'\t'"$bprompt"
 fi
 freemem=$(free -m | awk '/Mem:/ {printf "%.1f GiB", $7/1024}')
 
-export MC_STATE="$state" MC_MODEL="${model:-}" MC_FREE="$freemem" MC_UNIT="$active" MC_IMG="$img" MC_SD="$sd" MC_SDTAG="${sdtag:-}" MC_TAG="${tag:-}" MC_BUSY="$busy"
+export MC_STATE="$state" MC_MODEL="${model:-}" MC_UNIT_ID="$unit_id" MC_FREE="$freemem" MC_UNIT="$active" MC_IMG="$img" MC_SD="$sd" MC_BUSY="$busy" MC_PORT="$PORT"
+export MC_LLMS="$("$D/modelctl" list --tsv 2>/dev/null)"
+export MC_SDS="$("$D/modelctl" sd-list 2>/dev/null)"
 "$D/modelctl-agents" 2>/dev/null | python3 -c '
 import sys, json, os
+E = os.environ.get
 agents = []
 for line in sys.stdin.read().splitlines():
     if not line.strip():
         continue
-    p = (line.split("\t") + [""] * 5)[:5]
-    agents.append({"name": p[0], "cwd": p[1], "status": p[2],
-                   "focused": p[3] == "1", "pane": p[4]})
-print(json.dumps({"state": os.environ.get("MC_STATE", "off"),
-                  "model": os.environ.get("MC_MODEL", ""),
-                  "tag":   os.environ.get("MC_TAG", ""),
-                  "free":  os.environ.get("MC_FREE", ""),
-                  "unit":  os.environ.get("MC_UNIT", ""),
-                  "image": os.environ.get("MC_IMG", "off") == "on",
-                  "sd":    os.environ.get("MC_SD", ""),
-                  "sdtag": os.environ.get("MC_SDTAG", ""),
-                  "busy":  (lambda b: {"model": b[0], "elapsed": int(b[1] or 0), "progress": b[2], "prompt": b[3]}
-                            if b and b[0] else None)((os.environ.get("MC_BUSY", "") + "\t\t\t").split("\t")),
-                  "agents": agents}))
+    p = (line.split("\t") + [""] * 6)[:6]
+    agents.append({"name": p[0], "cwd": p[1], "status": p[2], "focused": p[3] == "1", "pane": p[4], "focus": p[5]})
+llms = []
+for line in E("MC_LLMS", "").splitlines():
+    p = (line.split("\t") + [""] * 7)[:7]
+    llms.append({"id": p[0], "label": p[1], "tag": p[2], "ctx": int(p[3] or 0), "note": p[4], "path": p[5], "vision": p[6] == "1"})
+sds = []
+for line in E("MC_SDS", "").splitlines():
+    p = (line.split("|") + [""] * 11)[:11]
+    sds.append({"id": p[0], "label": p[1], "note": p[2], "peak": int(p[3] or 0), "steps": p[4], "cfg": p[5], "res": p[6],
+                "tag": p[8], "status": p[9], "family": p[10]})
+tag = next((m["tag"] for m in llms if m["label"] == E("MC_MODEL", "") or m["id"] == E("MC_UNIT_ID", "")), "")
+sdtag = next((m["tag"] for m in sds if m["id"] == E("MC_SD", "")), "")
+b = (E("MC_BUSY", "") + "\t\t\t").split("\t")
+print(json.dumps({"state": E("MC_STATE", "off"), "model": E("MC_MODEL", ""), "modelId": E("MC_UNIT_ID", ""),
+                  "tag": tag, "free": E("MC_FREE", ""), "unit": E("MC_UNIT", ""), "port": int(E("MC_PORT", "8090")),
+                  "image": E("MC_IMG", "off") == "on", "sd": E("MC_SD", ""), "sdtag": sdtag,
+                  "busy": {"model": b[0], "elapsed": int(b[1] or 0), "progress": b[2], "prompt": b[3]} if b[0] else None,
+                  "llms": llms, "sds": sds, "agents": agents}))
 '
