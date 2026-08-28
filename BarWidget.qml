@@ -83,18 +83,21 @@ Panel {
 
   // Scripts ship in bin/ next to this file, wherever the plugin folder lives.
   function scriptDir() { return Qt.resolvedUrl("bin").toString().replace(/^file:\/\//, "") }
-  function run(cmd) { if (bar && bar.run) bar.run(cmd) }
+  // Every action is an argv: bash only ever sees the constant `exec "$@"`, so ids,
+  // paths and anything read from herdr / Hyprland land in positional parameters and
+  // are never re-tokenized. Same shape as the shell's own Util.execArgv.
+  function run(argv) { Quickshell.execDetached(["bash", "-lc", 'exec "$@"', "bash"].concat(argv)) }
   function refreshSoon() { refreshTimer.restart() }
 
   function switchLlm(id) {
     if (root.pendingLlm === id) return
     root.pendingLlm = id
-    root.run(root.scriptDir() + "/modelctl-switch " + JSON.stringify(id))
+    root.run([root.scriptDir() + "/modelctl-switch", id])
     refreshSoon()
   }
   function stopLlm() {
     root.pendingLlm = ""
-    root.run(root.scriptDir() + "/modelctl-stop")
+    root.run([root.scriptDir() + "/modelctl-stop"])
     refreshSoon()
   }
   function toggleServer() {
@@ -103,27 +106,28 @@ Panel {
   }
   function selectSd(id) {
     root.sdModel = id
-    root.run(root.scriptDir() + "/modelctl-sd select " + JSON.stringify(id))
+    root.run([root.scriptDir() + "/modelctl-sd", "select", id])
     refreshSoon()
   }
   function toggleImageServer() {
     root.imageOn = !root.imageOn
-    root.run(root.imageOn ? "systemctl --user start modelctl@image.service"
-                          : "systemctl --user stop modelctl@image.service")
+    root.run(["systemctl", "--user", root.imageOn ? "start" : "stop", "modelctl@image.service"])
     refreshSoon()
   }
   function generate() {
     root.close()
-    root.run(root.scriptDir() + "/modelctl-image")
+    root.run([root.scriptDir() + "/modelctl-image"])
   }
   function focusAgent(a) {
     root.close()
-    if (a && a.focus) root.run(a.focus)
+    if (a && Array.isArray(a.focus) && a.focus.length) root.run(a.focus)
   }
 
   Process {
     id: poll
-    command: ["bash", "-lc", root.scriptDir() + "/modelctl-barjson"]
+    // Login shell for the session PATH (sd-cli, herdr live in ~/.local/bin); the
+    // script path is the only argument and it is ours.
+    command: ["bash", "-lc", 'exec "$@"', "bash", root.scriptDir() + "/modelctl-barjson"]
     stdout: StdioCollector {
       onStreamFinished: {
         try {
@@ -175,7 +179,7 @@ Panel {
       tooltipText: root.heroStatus() + "\nLeft: dropdown · Middle: stop · Right: logs"
       onPressed: function(b) {
         if (b === Qt.MiddleButton) root.stopLlm()
-        else if (b === Qt.RightButton) root.run("omarchy-launch-or-focus-tui 'journalctl --user -u modelctl.service -u modelctl@*.service -f'")
+        else if (b === Qt.RightButton) root.run(["omarchy-launch-or-focus-tui", "journalctl --user -u modelctl.service -u 'modelctl@*.service' -f"])
         else root.toggle()
       }
     }

@@ -102,6 +102,35 @@ unpushed code. `omarchy plugin validate .` checks the manifest before pushing;
 `bin/modelctl-check` checks the bar and menu agree with herdr; `modelctl-image --check`
 (opt-in) smoke-tests an image model.
 
+## Security
+
+The plugin runs unsandboxed inside `omarchy-shell`, like every Omarchy plugin, so
+here is exactly what it does:
+
+- **Executes** `llama-server`, `sd-cli` / `sd-server`, `systemctl --user`,
+  `notify-send`, `imv`/`xdg-open` on its own output, `herdr` and `hyprctl` for the
+  agent list. Every action from the widget is an argv passed through the constant
+  `bash -lc 'exec "$@"'`; nothing read from a filename, herdr or Hyprland is ever
+  re-parsed by a shell. Checkpoint paths reach `sd-cli` as a NUL-separated argv.
+  No `eval`, no privilege escalation, no `sudo`/`pkexec`.
+- **Network**: `llama-server` and `sd-server` bind `127.0.0.1` only; the widget's
+  only client traffic is `curl` to `127.0.0.1:<port>/health` and `/v1/models`.
+  Nothing leaves the machine; no telemetry.
+- **Writes** `~/.local/state/modelctl/` (selection, run logs, `--check` results and
+  images), `~/Pictures/generated/` (or `imageDir`), `~/.config/modelctl/models.conf`
+  (created from the example only if absent), and — the one shared file — the agent
+  rows in `~/.config/omarchy/extensions/omarchy-menu.jsonc`, rewritten with every
+  non-`modelctl.*` key preserved and the JSON validated before it replaces the file.
+  `install.sh` adds symlinks in `~/.local/bin` and `~/.config/systemd/user`;
+  `uninstall.sh` removes only those and its own menu keys.
+- **Reads** the model folders, `journalctl -k` and amdgpu sysfs (to explain a GPU
+  hang), `ps`, `/proc/<pid>/cwd` and `hyprctl clients` (to list agents). All local,
+  all already visible to your user.
+- **Model files** are parsed by llama.cpp and stable-diffusion.cpp's own loaders.
+  Only `.gguf` and `.safetensors` are discovered; `.ckpt` (pickle) is deliberately not.
+- **Config** (`models.conf`) is trusted: `args`/`extra` there go to the servers as
+  written. It is your file.
+
 ## Requirements
 
 - `llama-cpp` + `ggml-vulkan` (or another ggml backend) — `llama-server` on `PATH`

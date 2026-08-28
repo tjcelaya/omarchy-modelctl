@@ -9,6 +9,7 @@
   modelctl show <id>       the exact llama-server command line, without running it
   modelctl conf <key> [default]   print a [defaults] value from models.conf (for the shell scripts)
   modelctl sd-list         image models: id|label|note|peak|steps|cfg|res|args|tag|status|family
+  modelctl sd-args <id>    that model's sd-cli argv, NUL-separated (never word-split a path)
 
 Models are found under MODELCTL_MODEL_DIRS (colon-separated; default
 ~/.lmstudio/models:~/.cache/llama.cpp:~/models:~/.ollama/models), recursively,
@@ -133,7 +134,7 @@ def discover(cp):
 
 
 # ── image models ──────────────────────────────────────────────────────────────
-SD_EXT = (".safetensors", ".gguf", ".ckpt")
+SD_EXT = (".safetensors", ".gguf")   # no .ckpt: pickle containers, nothing on this stack needs them
 # Files that are never a model on their own: VAEs, text encoders, projectors.
 SD_COMPANION = re.compile(r"(^|[-_.])(ae|vae|t5|t5xxl|clip|clip_l|clip_g|qwen[0-9]*|llm|encoder|mmproj|umt5)([-_.]|$)", re.I)
 # Family by filename, first match wins. Everything unmatched is treated as SD 1.x.
@@ -285,6 +286,12 @@ def main(argv):
         for m in sd_discover(cp):
             print("|".join([m["id"], m["label"], m["note"], m["peak"], m["steps"], m["cfg"], m["res"], m["args"],
                             m["tag"], m["status"], m["family"]]))
+        return
+    if cmd == "sd-args":
+        m = next((m for m in sd_discover(cp) if m["id"] == argv[1]), None)
+        if not m:
+            sys.exit(f"modelctl: unknown image model '{argv[1]}'")
+        sys.stdout.write("\0".join(shlex.split(m["args"])) + "\0")
         return
     if cmd == "image":
         sd = sd_dir(cp)

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Every running interactive coding agent, as TSV:
-   agent  cwd  status  focused  id  focus-command
+   agent  cwd  status  focused  id  focus-command  focus-argv(JSON)
+focus-command is a shell string for the Omarchy menu (which only runs strings);
+focus-argv is the same action as an argv array for the bar widget, so nothing
+read from herdr or Hyprland is ever re-parsed by a shell.
 
 Sources, deduplicated:
   herdr   `herdr agent list` — status and pane, focused via `herdr agent focus`
@@ -11,7 +14,7 @@ Sources, deduplicated:
           headless helpers (daemons, background sessions) have no window and are
           ignored. tmux panes are not walked yet.
 Empty output, exit 0, when nothing is running."""
-import json, os, subprocess, sys
+import json, os, shlex, subprocess, sys
 
 AGENTS = {"claude", "opencode", "codex", "gemini", "pi", "omp", "crush", "copilot",
           "cursor", "amp", "grok", "kimi", "kilo", "qwen", "droid", "aider"}
@@ -34,9 +37,11 @@ rows = []
 # ── herdr ──
 try:
     for a in json.loads(run(["herdr", "agent", "list"])).get("result", {}).get("agents", []) or []:
+        pane = str(a.get("pane_id", ""))
         rows.append([a.get("agent", "?"), short(a.get("cwd") or ""), a.get("agent_status", ""),
-                     "1" if a.get("focused") else "0", a.get("pane_id", ""),
-                     f"herdr agent focus {a.get('pane_id', '')}"])
+                     "1" if a.get("focused") else "0", pane,
+                     f"herdr agent focus {shlex.quote(pane)}",
+                     json.dumps(["herdr", "agent", "focus", pane])])
 except Exception:
     pass
 
@@ -75,10 +80,14 @@ for pid, (ppid, tty, comm, args) in procs.items():
         cwd = short(os.readlink(f"/proc/{pid}/cwd"))
     except OSError:
         cwd = ""
+    wpid = int(win["pid"])   # integer by construction; the only thing interpolated
+    # Hyprland >= 0.56 takes Lua; older builds take the classic dispatcher. The argv
+    # form passes the pid as a positional parameter so bash never re-tokenizes it.
+    lua = 'hyprctl dispatch "hl.dsp.focus({ window = \\"pid:$1\\" })" >/dev/null 2>&1 || hyprctl dispatch focuswindow "pid:$1"'
     rows.append([comm, cwd, "running", "1" if win["pid"] == active else "0", f"pid:{pid}",
-                 # Hyprland >= 0.56 takes Lua; older builds take the classic dispatcher.
-                 f"hyprctl dispatch 'hl.dsp.focus({{ window = \"pid:{win['pid']}\" }})' >/dev/null 2>&1"
-                 f" || hyprctl dispatch focuswindow pid:{win['pid']}"])
+                 f"hyprctl dispatch 'hl.dsp.focus({{ window = \"pid:{wpid}\" }})' >/dev/null 2>&1"
+                 f" || hyprctl dispatch focuswindow pid:{wpid}",
+                 json.dumps(["bash", "-c", lua, "bash", str(wpid)])])
 
 for r in rows:
     print("\t".join(r))

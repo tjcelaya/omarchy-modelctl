@@ -41,6 +41,10 @@ resolve() { models | awk -F'|' -v k="$1" '
   { if ($9==k) tag=$1; if (index(tolower($1),tolower(k))) {ni++; id=$1}; if (index(tolower($2),tolower(k))) {nl++; lb=$1} }
   END { if (found) exit 0; if (tag) print tag; else if (ni==1) print id; else if (nl==1) print lb; else exit 1 }'; }
 default_model() { models | head -1 | cut -d'|' -f1; }
+# The model's sd-cli argv, as a bash array — never word-split or globbed.
+load_args() { mapfile -d '' ARGV < <("$D/modelctl" sd-args "$1"); }
+drop_fa() { local a=(); local x; for x in "${ARGV[@]}"; do [ "$x" = --diffusion-fa ] || a+=("$x"); done; ARGV=("${a[@]}"); }
+has_fa() { local x; for x in "${ARGV[@]}"; do [ "$x" = --diffusion-fa ] && return 0; done; return 1; }
 
 # Latest native-res check result for a model: "status<TAB>wall<TAB>peak", or nothing.
 last_check() { [ -f "$CHECKS" ] && awk -F'\t' -v id="$1" '$2==id && $3=="full"{r=$4"\t"$5"\t"$6} END{if(r)print r}' "$CHECKS"; }
@@ -127,11 +131,12 @@ if [ "${1:-}" = --check ]; then
   istrue "$(conf sd_check false)" || { echo "modelctl-image --check is off: set sd_check = true under [defaults] in ~/.config/modelctl/models.conf" >&2; exit 2; }
   MODEL=$(resolve "${2:?usage: --check <id> [--no-fa] [--res N] [--steps N] [--full]}") || { echo "unknown or ambiguous image model '$2' (see --list)" >&2; exit 1; }; shift 2
   row=$(models | grep "^$MODEL|")
-  IFS='|' read -r _ _ _ PEAK DEF_STEPS DEF_CFG DEF_RES ARGS _ STATUS _ <<<"$row"
+  IFS='|' read -r _ _ _ PEAK DEF_STEPS DEF_CFG DEF_RES _ _ STATUS _ <<<"$row"
   [ "$STATUS" = ok ] || { echo "$MODEL: $STATUS — put the companion files in $SD or set args= in an [sd:$MODEL] section" >&2; exit 1; }
+  load_args "$MODEL"
   RES=512; STEPS=1; VARIANT=smoke
   while [ $# -gt 0 ]; do case "$1" in
-    --no-fa)  ARGS=$(printf '%s\n' $ARGS | grep -vx -- '--diffusion-fa' | tr '\n' ' '); VARIANT="$VARIANT,no-fa"; shift ;;
+    --no-fa)  drop_fa; VARIANT="$VARIANT,no-fa"; shift ;;
     --res)    RES="$2"; VARIANT="$VARIANT,res$2"; shift 2 ;;
     --steps)  STEPS="$2"; VARIANT="$VARIANT,steps$2"; shift 2 ;;
     --full)   RES=$DEF_RES; STEPS=$DEF_STEPS; VARIANT=full; shift ;;
@@ -140,7 +145,7 @@ if [ "${1:-}" = --check ]; then
   take_lock "check"
   park_if_needed "$PEAK"
   echo "check $MODEL [$VARIANT] ${RES}² ${STEPS} steps → $LOG"
-  run_sd "$LOG" $ARGS -p "a red cube on a white table" --steps "$STEPS" --cfg-scale "$DEF_CFG" \
+  run_sd "$LOG" "${ARGV[@]}" -p "a red cube on a white table" --steps "$STEPS" --cfg-scale "$DEF_CFG" \
          -W "$RES" -H "$RES" -o "$ST/checks/$stamp-$MODEL-$(printf '%s' "$VARIANT" | tr ',' '-').png"
   unpark; drop_lock
   if [ "$RC" = 0 ]; then status=ok; MSG="ok"; else classify "$LOG" "$RC"; status=$CLASS; fi
@@ -159,11 +164,12 @@ esac
 [ -n "$WANT" ] || { notify -u critical "No image models" "No checkpoints under $SD"; exit 1; }
 MODEL=$(resolve "$WANT") || { notify -u critical "Unknown image model" "'$WANT' matches none or several (modelctl-image --list)"; exit 1; }
 IFS='|' read -r _ _ _ PEAK _ <<<"$("$0" --list | grep "^$MODEL|")"
-IFS='|' read -r _ _ _ _ DEF_STEPS DEF_CFG DEF_RES ARGS _ STATUS _ <<<"$(models | grep "^$MODEL|")"
+IFS='|' read -r _ _ _ _ DEF_STEPS DEF_CFG DEF_RES _ _ STATUS _ <<<"$(models | grep "^$MODEL|")"
 [ "$STATUS" = ok ] || { notify -u critical "$MODEL is not runnable" "$STATUS · add the file(s) to $SD or set args= in [sd:$MODEL]"; exit 1; }
-# First path-ish token is the checkpoint; check it exists so failures are loud.
-CKPT=$(printf '%s\n' $ARGS | grep -m1 "^$SD/")
-[ -f "$CKPT" ] || { notify -u critical "Missing checkpoint" "$CKPT"; exit 1; }
+load_args "$MODEL"
+# The token after -m / --diffusion-model is the checkpoint; check it exists so failures are loud.
+CKPT=""; for i in "${!ARGV[@]}"; do case "${ARGV[$i]}" in -m|--diffusion-model) CKPT="${ARGV[$((i+1))]:-}"; break;; esac; done
+[ -f "$CKPT" ] || { notify -u critical "Missing checkpoint" "${CKPT:-no -m/--diffusion-model in args}"; exit 1; }
 # Where images land. Override per-invocation, or set MODELCTL_IMAGE_DIR in the
 # environment / the plugin's imageDir setting for a permanent change.
 OUT="${MODELCTL_IMAGE_DIR:-$HOME/Pictures/generated}"
@@ -184,15 +190,15 @@ LOG="$ST/logs/$stamp-$MODEL.log"
 take_lock "$prompt"
 park_if_needed "$PEAK"
 notify -i image "Generating ($MODEL)…" "$prompt"
-gen() { run_sd "$LOG" $ARGS -p "$prompt" \
+gen() { run_sd "$LOG" "${ARGV[@]}" -p "$prompt" \
      --steps "${SD_STEPS:-$DEF_STEPS}" --cfg-scale "${SD_CFG:-$DEF_CFG}" \
      -W "${SD_W:-$DEF_RES}" -H "${SD_H:-$DEF_RES}" -o "$f"; }
 gen
 if [ "$RC" != 0 ]; then
   classify "$LOG" "$RC"
-  if [ "$CLASS" = device-lost ] && istrue "$(conf sd_retry_no_fa true)" && printf '%s\n' $ARGS | grep -qx -- '--diffusion-fa'; then
+  if [ "$CLASS" = device-lost ] && istrue "$(conf sd_retry_no_fa true)" && has_fa; then
     notify -i image "GPU hung — retrying without flash attention" "$MODEL · $prompt"
-    ARGS=$(printf '%s\n' $ARGS | grep -vx -- '--diffusion-fa' | tr '\n' ' ')
+    drop_fa
     LOG="$ST/logs/$stamp-$MODEL-retry.log"; gen
     [ "$RC" != 0 ] && classify "$LOG" "$RC"
   fi
