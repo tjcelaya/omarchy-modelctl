@@ -144,27 +144,27 @@ SD_FAMILY_RE = [
     (r"sdxl|sd_xl", "sdxl"), (r"sd[-_]?turbo", "sd-turbo"),
     (r"sd3|stable[-_]?diffusion[-_]?3", "sd3"),
 ]
-# Per family: sampler defaults, how the checkpoint is passed, which companions it needs
-# (name -> filename regex) and which are optional. Flags are sd-cli's; nothing here is
-# a measurement.
+# Per family: bar tag, sampler defaults, how the checkpoint is passed, which companions
+# it needs (name -> filename regex) and which are optional. Flags are sd-cli's; nothing
+# here is a measurement.
 SD_FAMILY = {
-    "sd15":           dict(steps=20, cfg=7.0, res=512,  load="-m", flags="--type f16", needs={}, opt={}),
-    "sd-turbo":       dict(steps=4,  cfg=1.0, res=512,  load="-m", flags="--type f16", needs={}, opt={}),
-    "sdxl":           dict(steps=20, cfg=7.0, res=1024, load="-m", flags="--diffusion-fa --vae-tiling", needs={},
+    "sd15":           dict(tag="sd15", steps=20, cfg=7.0, res=512,  load="-m", flags="--type f16", needs={}, opt={}),
+    "sd-turbo":       dict(tag="turbo", steps=4,  cfg=1.0, res=512,  load="-m", flags="--type f16", needs={}, opt={}),
+    "sdxl":           dict(tag="sdxl", steps=20, cfg=7.0, res=1024, load="-m", flags="--diffusion-fa --vae-tiling", needs={},
                            opt={"vae": r"sdxl.*vae|vae.*(sdxl|xl)"}),
-    "sdxl-lightning": dict(steps=4,  cfg=1.0, res=1024, load="-m",
+    "sdxl-lightning": dict(tag="sdxl", steps=4,  cfg=1.0, res=1024, load="-m",
                            flags="--sampling-method euler --scheduler sgm_uniform --diffusion-fa --vae-tiling",
                            needs={}, opt={"vae": r"sdxl.*vae|vae.*(sdxl|xl)"}),
-    "flux-schnell":   dict(steps=4,  cfg=1.0, res=1024, load="--diffusion-model", flags="--diffusion-fa --vae-tiling",
+    "flux-schnell":   dict(tag="flux", steps=4,  cfg=1.0, res=1024, load="--diffusion-model", flags="--diffusion-fa --vae-tiling",
                            needs={"vae": r"^(flux_)?ae\b|flux.*ae", "t5xxl": r"t5.*xxl|t5xxl", "clip_l": r"clip_l"}, opt={}),
-    "flux-dev":       dict(steps=20, cfg=1.0, res=1024, load="--diffusion-model", flags="--diffusion-fa --vae-tiling",
+    "flux-dev":       dict(tag="flux", steps=20, cfg=1.0, res=1024, load="--diffusion-model", flags="--diffusion-fa --vae-tiling",
                            needs={"vae": r"^(flux_)?ae\b|flux.*ae", "t5xxl": r"t5.*xxl|t5xxl", "clip_l": r"clip_l"}, opt={}),
-    "chroma":         dict(steps=20, cfg=4.0, res=1024, load="--diffusion-model",
+    "chroma":         dict(tag="chrm", steps=20, cfg=4.0, res=1024, load="--diffusion-model",
                            flags="--sampling-method euler --diffusion-fa --vae-tiling",
                            needs={"vae": r"^(flux_)?ae\b|flux.*ae", "t5xxl": r"t5.*xxl|t5xxl"}, opt={}),
-    "zimage":         dict(steps=8,  cfg=1.0, res=1024, load="--diffusion-model", flags="--diffusion-fa --vae-tiling",
+    "zimage":         dict(tag="zimg", steps=8,  cfg=1.0, res=1024, load="--diffusion-model", flags="--diffusion-fa --vae-tiling",
                            needs={"vae": r"^(flux_)?ae\b|flux.*ae", "llm": r"qwen3.*4b|qwen"}, opt={}),
-    "sd3":            dict(steps=28, cfg=4.5, res=1024, load="-m", flags="--vae-tiling",
+    "sd3":            dict(tag="sd3", steps=28, cfg=4.5, res=1024, load="-m", flags="--vae-tiling",
                            needs={"clip_l": r"clip_l", "clip_g": r"clip_g", "t5xxl": r"t5.*xxl|t5xxl"}, opt={}),
 }
 SD_TAG_RE = re.compile(r"[^a-z0-9]")
@@ -236,7 +236,7 @@ def sd_discover(cp):
             "id": mid, "label": label, "family": fam, "peak": c.get("peak", str(peak)),
             "steps": c.get("steps", str(F["steps"])), "cfg": c.get("cfg", str(F["cfg"])), "res": c.get("res", str(F["res"])),
             "note": c.get("note") or f"{fam} · {c.get('res', F['res'])}² · {c.get('steps', F['steps'])} steps",
-            "args": args, "tag": c.get("tag") or SD_TAG_RE.sub("", label.lower())[:5],
+            "args": args, "tag": c.get("tag") or F["tag"],
             "status": "ok" if (c.get("args") or not missing) else "missing " + ",".join(missing),
         })
     # Declared-only sections: a name that is not a glob over any file, with args=.

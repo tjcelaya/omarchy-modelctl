@@ -52,15 +52,15 @@ classified before it is shown — *GPU hung and was reset by amdgpu* (with the k
 ring-timeout line), *out of GPU memory* (with the counters), *checkpoint unreadable*,
 *sd-cli crashed with signal N* — instead of the last three lines of a progress bar.
 
-Two opt-in keys under `[defaults]` in `~/.config/modelctl/models.conf`:
+Two keys under `[defaults]` in `~/.config/modelctl/models.conf`:
 
 - `sd_check = true` enables `modelctl-image --check <id> [--no-fa] [--res N] [--steps N] [--full]`:
   a fixed-prompt smoke test (1 step at 512² by default; `--full` = the model's native
   res and steps). Each run appends wall time, peak GPU use and the failure class to
   `~/.local/state/modelctl/sd-checks.tsv` (`--checks` prints it). `--no-fa` / `--res`
   are for bisecting a hang: is it flash attention, or the resolution?
-- `sd_retry_no_fa = true`: when a generation dies with a Vulkan device-lost, retry it
-  once without `--diffusion-fa` and say so in the notification.
+- `sd_retry_no_fa` (default `true`): when a generation dies with a Vulkan device-lost,
+  retry it once without `--diffusion-fa` and say so in the notification.
 
 Deliberately separate from Omarchy's built-in `omarchy.agents`, which reports Claude
 subscription usage rather than running sessions.

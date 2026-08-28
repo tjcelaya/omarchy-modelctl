@@ -17,7 +17,7 @@
 # models.conf [defaults] keys used here:
 #   sd_dir          checkpoint folder ($SD in [sd:*] args)
 #   sd_check        true → enable --check (default false)
-#   sd_retry_no_fa  true → after a GPU device-lost, retry once without --diffusion-fa
+#   sd_retry_no_fa  false → do not retry without --diffusion-fa after a GPU device-lost (default true)
 set -uo pipefail
 D="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 ST="$HOME/.local/state/modelctl"; mkdir -p "$ST/logs" "$ST/checks"
@@ -190,7 +190,7 @@ gen() { run_sd "$LOG" $ARGS -p "$prompt" \
 gen
 if [ "$RC" != 0 ]; then
   classify "$LOG" "$RC"
-  if [ "$CLASS" = device-lost ] && istrue "$(conf sd_retry_no_fa false)" && printf '%s\n' $ARGS | grep -qx -- '--diffusion-fa'; then
+  if [ "$CLASS" = device-lost ] && istrue "$(conf sd_retry_no_fa true)" && printf '%s\n' $ARGS | grep -qx -- '--diffusion-fa'; then
     notify -i image "GPU hung — retrying without flash attention" "$MODEL · $prompt"
     ARGS=$(printf '%s\n' $ARGS | grep -vx -- '--diffusion-fa' | tr '\n' ' ')
     LOG="$ST/logs/$stamp-$MODEL-retry.log"; gen

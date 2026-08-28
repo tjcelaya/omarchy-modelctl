@@ -17,8 +17,8 @@
 #        sd_server_model checkpoint the resident sd-server loads
 #        sd_check        true -> `modelctl-image --check <id>` smoke-tests a model and
 #                        records wall time / peak GPU use / failure class (default false)
-#        sd_retry_no_fa  true -> if the GPU hangs (Vulkan device lost) mid-generation,
-#                        retry once without --diffusion-fa (default false)
+#        sd_retry_no_fa  false -> do not retry without --diffusion-fa after the GPU hangs
+#                        mid-generation (Vulkan device lost); default true, one retry
 
 [defaults]
 default = gpt-oss-20b*
@@ -29,7 +29,7 @@ args = -ngl 99 -fa on -ctk q8_0 -ctv q8_0 -np 1 --cache-reuse 256 --jinja
 sd_dir = ~/.local/share/stable-diffusion/models
 sd_server_model = sd_turbo.safetensors
 # sd_check = true
-# sd_retry_no_fa = true
+# sd_retry_no_fa = false
 
 [gpt-oss-20b*]
 ctx = 131072
@@ -65,18 +65,14 @@ note = 29 tok/s · quick chat
 #
 # [sd:<glob>] sections overlay a discovered model (glob against the id = filename
 # without extension); later sections override earlier ones. Keys:
-#   label  note  tag (≤5 chars by the bar 󰋩)  peak (MiB, parking estimate)
+#   label  note  tag (≤5 chars by the bar 󰋩; families default to turbo/sd15/sdxl/flux/chrm/zimg/sd3)
+#   peak (MiB, parking estimate)
 #   steps  cfg  res   default --steps / --cfg-scale / -W -H
 #   extra  flags appended (e.g. a LoRA)     args   full replacement of the sd-cli args
 #   hide = true  drop it from the menu      sd_hide (in [defaults]) = globs to drop
 # A section whose name matches no file but has args= is a fully declared model
 # ($SD in args = sd_dir).
 
-[sd:z_image*]
-tag = zimg
-
+# Example: flash attention hangs your GPU on Chroma — run it without:
 [sd:Chroma*]
-tag = chrm
-# If flash attention hangs your GPU on this model, replace the flags:
-# extra = --steps 20
 # args = --diffusion-model $SD/Chroma1-HD-Q8_0.gguf --vae $SD/flux_ae.safetensors --t5xxl $SD/t5-v1_1-xxl-encoder-Q8_0.gguf --sampling-method euler --vae-tiling
