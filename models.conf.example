@@ -12,6 +12,11 @@
 #        tag    ≤5-char text shown next to the bar icon (default: derived from label)
 #        note   one line for the menu description / `modelctl list`
 #        mmproj vision projector path (default: an mmproj-*.gguf in the same folder)
+# [defaults]-only keys:
+#        menu_layout     headers (default): "llama.cpp" and "stable-diffusion" header rows,
+#                        each collapsible, bulleted models under them
+#                        flat: no headers, plain rows, a separator between the two lists
+#                        submenus: each list is its own submenu (shortest card)
 # [defaults]-only keys for image generation:
 #        sd_dir          checkpoint folder for modelctl-image / sd-server
 #        sd_server_model checkpoint the resident sd-server loads
@@ -28,6 +33,7 @@ default = gpt-oss-20b*
 args = -ngl 99 -fa on -ctk q8_0 -ctv q8_0 -np 1 --cache-reuse 256 --jinja
 sd_dir = ~/.local/share/stable-diffusion/models
 sd_server_model = sd_turbo.safetensors
+# menu_layout = headers
 # sd_check = true
 # sd_retry_no_fa = true
 

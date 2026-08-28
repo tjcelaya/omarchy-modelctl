@@ -131,6 +131,14 @@ its manifests and each pulled `name:tag` is served straight from its GGUF blob
 projectors are attached automatically, sharded models start from shard 1, and the
 menu regenerates from the scan every time it opens.
 
+### Menu layout
+
+The `Local models` card has a `llama.cpp` section and a `stable-diffusion` section,
+then `Stop server` and `Agents` as a footer. `menu_layout` under `[defaults]` in
+`models.conf` picks the shape: `headers` (default — icon header rows, each collapsible,
+bulleted models under them), `flat` (no headers, plain rows, one separator) or
+`submenus` (each section is its own submenu, shortest card).
+
 ### Tuning: `~/.config/modelctl/models.conf`
 
 Machine- and model-specific settings live here, not in code (created from

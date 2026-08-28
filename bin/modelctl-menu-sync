@@ -23,49 +23,78 @@ s=open(static).read().replace("@BIN@", os.environ["MC_BIN"])
 import subprocess, shlex
 SB=os.environ["MC_BIN"]
 shlex_q=shlex.quote
-# ── model rows: whatever `modelctl list` discovers on disk ──
+import os
+ST=os.path.expanduser("~/.local/state/modelctl")
+def conf(k,d=""): return subprocess.run([SB+"/modelctl","conf",k,d],capture_output=True,text=True).stdout.strip()
+LAYOUT=conf("menu_layout","headers")            # headers | flat | submenus
+if LAYOUT not in ("headers","flat","submenus"): LAYOUT="headers"
+J=lambda v: json.dumps(v,ensure_ascii=False)
+SEP='  "modelctl.%s": {"icon":"","label":"────────────────","description":"","action":"true"},'
+def row(key,label,desc,action,checked=None,icon="",when=None):
+    r=f'  {J(key)}: {{"icon":{J(icon)},"label":{J(label)},"description":{J(desc)},"action":{J(action)}'
+    if checked is not None: r+=f',"checked":{J(checked)}'
+    if when: r+=f',"when":{J(when)}'
+    return r+"},"
+# Section rows live one dot under their parent: `modelctl.x_id` in a flat card, `modelctl.llm.id`
+# inside a submenu. Bullets mark rows under a header; flat layout has no headers, no bullets.
+def child(parent,key): return f"{parent}.{key}" if LAYOUT=="submenus" else f"modelctl.{parent.split('.')[-1]}_{key}"
+bullet="· " if LAYOUT!="flat" else ""
+
+# ── llama.cpp section: whatever `modelctl list` discovers on disk ──
+llm=[]
+loaded=subprocess.run(["bash","-c","systemctl --user list-units --plain --no-legend 'modelctl@*.service' | awk '$4==\"running\"{print $1}' | sed 's/^modelctl@//;s/\\.service$//' | head -1"],capture_output=True,text=True).stdout.strip()
 mrows=[]
 for line in subprocess.run([SB+"/modelctl","list","--tsv"],capture_output=True,text=True).stdout.splitlines():
     mid,label,tag,ctx,note,path,vis=(line.split("\t")+[""]*7)[:7]
     desc=" · ".join(x for x in [f"{int(ctx)//1024}k ctx", "vision" if vis=="1" else "", note] if x)
-    mrows.append('  "modelctl.m_%s": {"icon":"","label":%s,"description":%s,"action":%s,"checked":%s},'
-        % (re.sub(r"[^A-Za-z0-9_]","_",mid), json.dumps(label,ensure_ascii=False), json.dumps(desc,ensure_ascii=False),
-           json.dumps(f"{SB}/modelctl-switch {mid}"), json.dumps(f"systemctl --user is-active --quiet 'modelctl@{mid}.service'")))
+    mrows.append(row(child("modelctl.llm",re.sub(r"[^A-Za-z0-9_]","_",mid)), bullet+label, desc,
+                     f"{SB}/modelctl-switch {mid}", f"systemctl --user is-active --quiet 'modelctl@{mid}.service'"))
 if not mrows:
-    mrows.append('  "modelctl.m_none": {"icon":"","label":"No GGUF models found","description":"Set MODELCTL_MODEL_DIRS, or pull one with LM Studio or Ollama","action":"true"},')
-s=s.replace("// @MODEL_ROWS@","\n".join(mrows))
+    mrows.append(row(child("modelctl.llm","none"), bullet+"No GGUF models found",
+                     "Set MODELCTL_MODEL_DIRS, or pull one with LM Studio or Ollama", "true"))
+llm_desc=f"{len(mrows)} model{'s' if len(mrows)!=1 else ''} · " + (f"{loaded} loaded" if loaded else "nothing loaded")
+llm_open=not os.path.exists(ST+"/llm-collapsed")
+if LAYOUT=="headers":
+    llm.append(row("modelctl.llm","llama.cpp",llm_desc,f"{SB}/modelctl-sd toggle-llm","[ ! -e ~/.local/state/modelctl/llm-collapsed ]",icon="󰚩"))
+    if llm_open: llm+=mrows
+elif LAYOUT=="submenus":
+    llm.append(f'  "modelctl.llm": {{"icon":"󰚩","label":"llama.cpp","description":{J(llm_desc)},"aliases":["llm","gguf"]}},')
+    llm+=mrows
+else:
+    llm+=mrows
+s=s.replace("// @MODEL_SECTION@","\n".join(llm))
 
-# ── image section (own section; separator below is the static modelctl.sep) ──
-import os
-ST=os.path.expanduser("~/.local/state/modelctl")
+# ── stable-diffusion section: checkpoints discovered under sd_dir ──
 sel=(open(ST+"/sd-model").read().strip() if os.path.exists(ST+"/sd-model") else "")
-expanded=os.path.exists(ST+"/sd-expanded")
-img=['  "modelctl.imgsep": {"icon":"","label":"────────────────","description":"","action":"true"},',
-     '  "modelctl.sd": {"icon":"󰋩","label":"stable-diffusion","description":"Show model selection · bar 󰋩 generates with the selected one",'
-     f'"action":"{SB}/modelctl-sd toggle-expand",'
-     '"checked":"[ -e ~/.local/state/modelctl/sd-expanded ]"},']
-if expanded:
-    tbl=subprocess.run([SB+"/modelctl-image","--list"],
-                       capture_output=True,text=True).stdout
-    if not tbl.strip():
-        img.append('  "modelctl.sdnone": {"icon":"","label":"· No checkpoints found","description":"Put .safetensors/.gguf checkpoints (and their VAE / text encoders) under sd_dir in ~/.config/modelctl/models.conf","action":"true"},')
-    for i,line in enumerate(tbl.splitlines()):
-        mid,lab,desc,peak,status=(line.split("|")+["ok"])[:5]
-        if status!="ok": lab+=" (✗)"      # companions missing; row explains
-        elif int(peak)>9000: lab+=" (!)"  # may park the running LLM for the duration
-        key=re.sub(r"[^A-Za-z0-9_]","_",mid)
-        checked=(f'[ \\"$(cat ~/.local/state/modelctl/sd-model 2>/dev/null)\\" = {shlex_q(mid)} ]' if sel
-                 else ("true" if i==0 else "false"))   # nothing selected yet → the first (default) row
-        img.append(f'  "modelctl.sd_{key}": {{"icon":"","label":{json.dumps("· "+lab)},'
-                   f'"description":{json.dumps(desc)},'
-                   f'"action":{json.dumps(f"{SB}/modelctl-sd select {shlex_q(mid)}")},'
-                   f'"checked":{json.dumps(checked)}}},')
-    img.append('  "modelctl.sdserver": {"icon":"","label":"· Keep loaded",'
-               '"description":"Toggle a resident sd-server · without it each image loads fresh (~1.4s)",'
-               '"action":"systemctl --user is-active --quiet modelctl@image.service '
-               '&& systemctl --user stop modelctl@image.service '
-               '|| systemctl --user start modelctl@image.service",'
-               '"checked":"systemctl --user is-active --quiet modelctl@image.service"},')
+tbl=subprocess.run([SB+"/modelctl-image","--list"],capture_output=True,text=True).stdout
+srows=[]
+if not tbl.strip():
+    srows.append(row(child("modelctl.sd","none"), bullet+"No checkpoints found",
+                     "Put .safetensors/.gguf checkpoints (and their VAE / text encoders) under sd_dir in ~/.config/modelctl/models.conf","true"))
+for i,line in enumerate(tbl.splitlines()):
+    mid,lab,desc,peak,status=(line.split("|")+["ok"])[:5]
+    if status!="ok": lab+=" (✗)"      # companions missing; row explains
+    elif int(peak)>9000: lab+=" (!)"  # may park the running LLM for the duration
+    checked=(f'[ \\"$(cat ~/.local/state/modelctl/sd-model 2>/dev/null)\\" = {shlex_q(mid)} ]' if sel
+             else ("true" if i==0 else "false"))   # nothing selected yet → the first (default) row
+    srows.append(row(child("modelctl.sd",re.sub(r"[^A-Za-z0-9_]","_",mid)), bullet+lab, desc,
+                     f"{SB}/modelctl-sd select {shlex_q(mid)}", checked))
+srows.append(row(child("modelctl.sd","server"), bullet+"Keep loaded",
+                 "Toggle a resident sd-server · without it each image loads fresh",
+                 "systemctl --user is-active --quiet modelctl@image.service && systemctl --user stop modelctl@image.service || systemctl --user start modelctl@image.service",
+                 "systemctl --user is-active --quiet modelctl@image.service"))
+nsd=len(tbl.splitlines()); selname=(sel or (tbl.splitlines()[0].split("|")[0] if nsd else ""))
+sd_desc=f"{nsd} model{'s' if nsd!=1 else ''} · " + (f"{selname} selected · bar 󰋩 generates with it" if selname else "none")
+sd_open=not os.path.exists(ST+"/sd-collapsed")
+img=[]
+if LAYOUT=="headers":
+    img.append(row("modelctl.sd","stable-diffusion",sd_desc,f"{SB}/modelctl-sd toggle-expand","[ ! -e ~/.local/state/modelctl/sd-collapsed ]",icon="󰋩"))
+    if sd_open: img+=srows
+elif LAYOUT=="submenus":
+    img.append(f'  "modelctl.sd": {{"icon":"󰋩","label":"stable-diffusion","description":{J(sd_desc)},"aliases":["images","sd"]}},')
+    img+=srows
+else:
+    img.append(SEP % "imgsep"); img+=srows
 s=s.replace("// @IMAGE_SECTION@","\n".join(img))
 extra=[# Own submenu so the bar badge can summon it directly (`omarchy menu summon modelctl.agents`).
        '  "modelctl.agents": {"icon":"\U000f018d","label":"Agents (%d)","description":"Running coding agents · select one to focus it","aliases":["agents","panes"]},' % len(rows)]

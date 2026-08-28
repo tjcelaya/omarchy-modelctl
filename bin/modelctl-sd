@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SD menu state: which model is selected, and whether the picker is expanded.
-# Usage: modelctl-sd select <id> | toggle-expand
+# Usage: modelctl-sd select <id> | toggle-expand | toggle-llm
 set -u
 D="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 ST="$HOME/.local/state/modelctl"; mkdir -p "$ST"
@@ -9,9 +9,11 @@ case "${1:-}" in
     id=$("$D/modelctl-image" --list | cut -d'|' -f1 | grep -xF -- "${2:-}") || { echo "unknown model ${2:-}" >&2; exit 1; }
     echo "$id" > "$ST/sd-model"
     notify-send -a modelctl -i image "Image model" "Selected: $id" ;;
-  toggle-expand)
-    if [ -e "$ST/sd-expanded" ]; then rm -f "$ST/sd-expanded"; else touch "$ST/sd-expanded"; fi ;;
-  *) echo "usage: modelctl-sd select <id> | toggle-expand" >&2; exit 1 ;;
+  toggle-expand)  # sections are open unless a *-collapsed marker exists
+    if [ -e "$ST/sd-collapsed" ]; then rm -f "$ST/sd-collapsed"; else touch "$ST/sd-collapsed"; fi ;;
+  toggle-llm)
+    if [ -e "$ST/llm-collapsed" ]; then rm -f "$ST/llm-collapsed"; else touch "$ST/llm-collapsed"; fi ;;
+  *) echo "usage: modelctl-sd select <id> | toggle-expand | toggle-llm" >&2; exit 1 ;;
 esac
 # Regenerate the menu so the change shows on next open
 "$D/modelctl-menu-sync" --force >/dev/null 2>&1

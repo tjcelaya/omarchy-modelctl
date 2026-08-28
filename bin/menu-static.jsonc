@@ -8,7 +8,8 @@
     "description": "Load a local GGUF model for opencode"
   },
 
-  // @MODEL_ROWS@
+  // @MODEL_SECTION@
+  // @IMAGE_SECTION@
   "modelctl.sep": {
     "icon": "",
     "label": "────────────────",
@@ -23,5 +24,4 @@
     "when": "systemctl --user is-active --quiet modelctl.service || systemctl --user list-units --plain --no-legend 'modelctl@*.service' | grep -q active"
   },
   // @AGENT_ROWS@
-  // @IMAGE_SECTION@
 }
