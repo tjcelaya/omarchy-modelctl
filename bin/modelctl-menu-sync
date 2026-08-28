@@ -79,10 +79,6 @@ for i,line in enumerate(tbl.splitlines()):
              else ("true" if i==0 else "false"))   # nothing selected yet → the first (default) row
     srows.append(row(child("modelctl.sd",re.sub(r"[^A-Za-z0-9_]","_",mid)), bullet+lab, desc,
                      f"{SB}/modelctl-sd select {shlex_q(mid)}", checked))
-srows.append(row(child("modelctl.sd","server"), bullet+"Keep loaded",
-                 "Toggle a resident sd-server · without it each image loads fresh",
-                 "systemctl --user is-active --quiet modelctl@image.service && systemctl --user stop modelctl@image.service || systemctl --user start modelctl@image.service",
-                 "systemctl --user is-active --quiet modelctl@image.service"))
 nsd=len(tbl.splitlines()); selname=(sel or (tbl.splitlines()[0].split("|")[0] if nsd else ""))
 sd_desc=f"{nsd} model{'s' if nsd!=1 else ''} · " + (f"{selname} selected · bar 󰋩 generates with it" if selname else "none")
 sd_open=not os.path.exists(ST+"/sd-collapsed")
@@ -96,7 +92,14 @@ elif LAYOUT=="submenus":
 else:
     img.append(SEP % "imgsep"); img+=srows
 s=s.replace("// @IMAGE_SECTION@","\n".join(img))
-extra=[# Own submenu so the bar badge can summon it directly (`omarchy menu summon modelctl.agents`).
+# Footer: the resident sd-server toggle sits next to "Stop LLM server" — it is a
+# service control, not a model, and the label must carry the meaning (descriptions
+# only render while searching).
+extra=[row("modelctl.sdserver","Keep image server loaded",
+           "Resident sd-server on :8091 · off = each image loads its model fresh",
+           "systemctl --user is-active --quiet modelctl@image.service && systemctl --user stop modelctl@image.service || systemctl --user start modelctl@image.service",
+           "systemctl --user is-active --quiet modelctl@image.service"),
+       # Own submenu so the bar badge can summon it directly (`omarchy menu summon modelctl.agents`).
        '  "modelctl.agents": {"icon":"\U000f018d","label":"Agents (%d)","description":"Running coding agents · select one to focus it","aliases":["agents","panes"]},' % len(rows)]
 j=lambda v: json.dumps(v, ensure_ascii=False)
 if not rows:

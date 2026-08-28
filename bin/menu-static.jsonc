@@ -18,8 +18,8 @@
   },
   "modelctl.stop": {
     "icon": "",
-    "label": "Stop server",
-    "description": "Release the GPU pool",
+    "label": "Stop LLM server",
+    "description": "Unload the running llama-server and release the GPU pool",
     "action": "@BIN@/modelctl-stop",
     "when": "systemctl --user is-active --quiet modelctl.service || systemctl --user list-units --plain --no-legend 'modelctl@*.service' | grep -q active"
   },
