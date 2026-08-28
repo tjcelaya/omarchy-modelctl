@@ -8,7 +8,7 @@
   modelctl image           resident sd-server (see MODELCTL_SD_DIR)
   modelctl show <id>       the exact llama-server command line, without running it
   modelctl conf <key> [default]   print a [defaults] value from models.conf (for the shell scripts)
-  modelctl sd-list         image models from the [sd:<id>] sections, as id|label|note|peak|steps|cfg|res|args
+  modelctl sd-list         image models from the [sd:<id>] sections, as id|label|note|peak|steps|cfg|res|args|tag
 
 Models are found under MODELCTL_MODEL_DIRS (colon-separated; default
 ~/.lmstudio/models:~/.cache/llama.cpp:~/models:~/.ollama/models), recursively,
@@ -161,7 +161,8 @@ def main(argv):
                 continue
             c = cp[sec]; mid = sec[3:].strip()
             print("|".join([mid, c.get("label", mid), c.get("note", ""), c.get("peak", "8000"), c.get("steps", "20"),
-                            c.get("cfg", "7.0"), c.get("res", "512"), c.get("args", "").replace("$SD", sd)]))
+                            c.get("cfg", "7.0"), c.get("res", "512"), c.get("args", "").replace("$SD", sd),
+                            c.get("tag", mid[:5])]))
         return
     if cmd == "image":
         sd = os.environ.get("MODELCTL_SD_DIR", cp.get("defaults", "sd_dir", fallback=f"{HOME}/.local/share/stable-diffusion/models"))

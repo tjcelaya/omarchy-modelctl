@@ -24,6 +24,8 @@ Item {
   property var agents: []
   property bool imageOn: false
   property string sdModel: "turbo"
+  property string sdTag: ""
+  property var busy: null            // {model, elapsed, progress, prompt} while sd-cli runs
   // Glyph settings (JetBrainsMono Nerd Font codepoints, verified to render 2026-08-27).
   // modelIcon — something that isn't Omarchy's own agents robot:
   //   󰧑 F09D1 brain      󰘚 F061A chip      󰻠 F0EE0 cpu-64-bit   󰍛 F035B memory   󰙴 F0674 sparkles
@@ -61,8 +63,15 @@ Item {
     var init = words.slice(0, size).map(function(w) { return w[0] }).join("").slice(0, 3)
     return init + words[size].replace(/\.\d+b$|b$/, "")
   }
-  function sdAbbrev(id) {
-    return ({turbo: "turbo", sd15: "sd15", sdxl: "sdxl", zimage: "zimg", flux: "flux", chroma: "chrm"})[id] || id
+  function sdAbbrev(id) { return root.sdTag || String(id).slice(0, 5) }
+  // While generating: "<tag> 37%" once the sampler reports progress, else "<tag> 1:05".
+  function sdText() {
+    if (!root.busy) return root.sdAbbrev(root.sdModel)
+    var b = root.busy, tag = b.model === root.sdModel ? root.sdAbbrev(b.model) : String(b.model).slice(0, 5)
+    var m = /^(\d+)\/(\d+)$/.exec(b.progress || "")
+    if (m && Number(m[2]) > 0) return tag + " " + Math.floor(100 * Number(m[1]) / Number(m[2])) + "%"
+    var s = Number(b.elapsed || 0)
+    return tag + " " + Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2)
   }
   // Icon and tag as one Text with a smaller-font span, so they sit on one baseline.
   function tagged(icon, tag) {
@@ -88,6 +97,8 @@ Item {
           root.agents  = d.agents || []
           root.imageOn = d.image === true
           root.sdModel = d.sd || "turbo"
+          root.sdTag   = d.sdtag || ""
+          root.busy    = d.busy || null
         } catch (e) {
           // Leave the last good reading in place rather than blanking the bar.
         }
@@ -135,9 +146,13 @@ Item {
       font.pixelSize: root.iconPx
       textFormat: Text.RichText
       color: root.fg
-      // Bright when the SD server is resident, dim when it is a one-shot launcher.
-      opacity: root.imageOn ? 1.0 : 0.6
-      text: root.tagged("󰋩", root.sdAbbrev(root.sdModel))
+      // Bright while generating or when the SD server is resident; dim when idle one-shot.
+      opacity: root.busy ? 1.0 : root.imageOn ? 1.0 : 0.6
+      text: root.tagged("󰋩", root.sdText())
+      SequentialAnimation on opacity {
+        running: root.busy !== null; loops: Animation.Infinite
+        NumberAnimation { to: 0.45; duration: 700 } NumberAnimation { to: 1.0; duration: 700 }
+      }
       MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton

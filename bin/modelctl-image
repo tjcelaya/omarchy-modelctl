@@ -75,12 +75,18 @@ classify() { # $1 log, $2 rc
 }
 
 # Run sd-cli, sampling GPU use once a second. Sets RC, PEAK_SEEN, WALL.
+# While it runs, $ST/image.busy holds "model<TAB>start-epoch<TAB>log<TAB>prompt<TAB>pid" so
+# the bar can show what is churning (modelctl-barjson reads progress out of the log).
+# Only the writer removes it: a queued run killed while waiting must not wipe the active one's.
+BUSY="$ST/image.busy"
+trap '[ "$(cut -f5 "$BUSY" 2>/dev/null)" = "$$" ] && rm -f "$BUSY"' EXIT
 run_sd() { # $1 log, rest = args
   local log="$1" t0 t1 pid u; shift; PEAK_SEEN=0
   t0=$(date +%s)
+  printf '%s\t%s\t%s\t%s\t%s\n' "$MODEL" "$t0" "$log" "${prompt:-check}" "$$" > "$BUSY"
   sd-cli "$@" >"$log" 2>&1 9>&- & pid=$!
   while kill -0 "$pid" 2>/dev/null; do u=$(gpu_used); [ "$u" -gt "$PEAK_SEEN" ] && PEAK_SEEN=$u; sleep 1; done
-  wait "$pid"; RC=$?; t1=$(date +%s); WALL=$((t1-t0))
+  wait "$pid"; RC=$?; t1=$(date +%s); WALL=$((t1-t0)); rm -f "$BUSY"
 }
 
 # Park the running LLM unit only if this model would not fit next to it (caller restores).

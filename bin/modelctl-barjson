@@ -23,10 +23,18 @@ tag=$("$D/modelctl" list --tsv 2>/dev/null | awk -F'\t' -v a="$model" '$2==a{pri
 img="off"
 if systemctl --user is-active --quiet modelctl@image.service; then img="on"; fi
 
-sd=$(cat "$HOME/.local/state/modelctl/sd-model" 2>/dev/null || echo turbo)
+ST="$HOME/.local/state/modelctl"
+sd=$(cat "$ST/sd-model" 2>/dev/null || echo turbo)
+sdtag=$("$D/modelctl" sd-list 2>/dev/null | awk -F'|' -v id="$sd" '$1==id{print $9}')
+# A generation in flight: model, seconds elapsed, and the sampler's "n/N" if the log has one.
+busy=""; if [ -f "$ST/image.busy" ]; then
+  IFS=$'\t' read -r bmodel bstart blog bprompt < "$ST/image.busy"
+  if [ -f "$blog" ]; then prog=$(tail -c 4000 "$blog" 2>/dev/null | tr '\r' '\n' | grep -oE '[0-9]+/[0-9]+ -' | tail -1 | cut -d' ' -f1); else prog=""; fi
+  busy="$bmodel"$'\t'"$(( $(date +%s) - bstart ))"$'\t'"${prog:-}"$'\t'"$bprompt"
+fi
 freemem=$(free -m | awk '/Mem:/ {printf "%.1f GiB", $7/1024}')
 
-export MC_STATE="$state" MC_MODEL="${model:-}" MC_FREE="$freemem" MC_UNIT="$active" MC_IMG="$img" MC_SD="$sd" MC_TAG="${tag:-}"
+export MC_STATE="$state" MC_MODEL="${model:-}" MC_FREE="$freemem" MC_UNIT="$active" MC_IMG="$img" MC_SD="$sd" MC_SDTAG="${sdtag:-}" MC_TAG="${tag:-}" MC_BUSY="$busy"
 "$D/modelctl-agents" 2>/dev/null | python3 -c '
 import sys, json, os
 agents = []
@@ -43,5 +51,8 @@ print(json.dumps({"state": os.environ.get("MC_STATE", "off"),
                   "unit":  os.environ.get("MC_UNIT", ""),
                   "image": os.environ.get("MC_IMG", "off") == "on",
                   "sd":    os.environ.get("MC_SD", "turbo"),
+                  "sdtag": os.environ.get("MC_SDTAG", ""),
+                  "busy":  (lambda b: {"model": b[0], "elapsed": int(b[1] or 0), "progress": b[2], "prompt": b[3]}
+                            if b and b[0] else None)((os.environ.get("MC_BUSY", "") + "\t\t\t").split("\t")),
                   "agents": agents}))
 '
