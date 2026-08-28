@@ -85,7 +85,8 @@ If the widget is not on the bar: `omarchy plugin enable tjcelaya.modelctl`, then
     omarchy plugin remove tjcelaya.modelctl
 
 `uninstall.sh` stops any running server, removes the units, the `PATH` symlink,
-modelctl's state and **only its own** `modelctl.*` entries in
+modelctl's transient state (generated images, run logs and `--check` results are
+yours and stay) and **only its own** `modelctl.*` entries in
 `~/.config/omarchy/extensions/omarchy-menu.jsonc` (other entries in that file are
 kept, both on install and on removal).
 
