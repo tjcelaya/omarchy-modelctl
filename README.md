@@ -5,7 +5,7 @@ running [herdr](https://github.com/tjcelaya/herdr) coding agent at a glance.
 
 ![modelctl in the Omarchy bar and its menu](preview.png)
 
-    󰙴2  󰧑oss20  󰋩
+    󰙴2  󰧑gpt-oss-20b  󰋩
 
 Three groups, one segment each. The `order` setting lists the groups shown, left to
 right (default `agents,model,image`); a group left out has no segment at all, so
@@ -23,15 +23,16 @@ menu (open the panel · enable/disable · shut down, which asks first).
   Image models group* when one is hidden, *Edit models.conf* (opens the plugin's own
   config in your editor), and *Shut down all agents*, which closes the herdr panes and
   sends SIGTERM to windowed processes after a confirmation. tmux panes: planned.
-- **Local models** (`󰧑` + abbreviation; glyph via `modelIcon`) — header carries the
+- **Local models** (`󰧑` + the loaded model's id; glyph via `modelIcon`) — header carries the
   llama-server switch; the list loads a model. Menu: start/stop the server, view its
   logs, disable the group, shut down every model server.
-- **Image models** (`󰋩`, plus the model tag while `sd-server` is resident, or
-  `chrm 37%` while one is generating; dim = nothing loaded) — header switch keeps
+- **Image models** (`󰋩`, plus the model id while `sd-server` is resident, or
+  `chroma1-hd 37%` while one is generating; dim = nothing loaded) — header switch keeps
   `sd-server` loaded, list picks the model, *Generate image…* prompts. Menu: disable
   the group, shut down the image server.
 
-Names, paths and status live in the dropdowns; the bar stays to icons and short tags.
+The bar shows glyphs and the full id of whatever is loaded, never an abbreviation;
+context, notes and paths live in the dropdowns.
 
 ### Image generation
 
@@ -208,7 +209,7 @@ Machine- and model-specific settings live here, not in code (created from
     [gpt-oss-20b*]
     ctx = 131072
     label = gpt-oss-20b        # the alias llama-server reports; match it in opencode
-    tag = oss20                # what the bar shows
+    tag = oss20                # optional short tag; the bar itself shows the full id
     note = fastest here
 
 Without a section a model gets 16k context and the stock flags. The values in the
@@ -226,7 +227,7 @@ Exposed through the plugin manifest, editable in Omarchy's settings UI:
 | `showCwd` | true | show each agent's working directory |
 | `imageDir` | `~/Pictures/generated` | where generated images are saved |
 | `order` | `agents,model,image` | groups shown, left to right; leave one out to drop its segment (`agents` is always kept) |
-| `modelIcon` | `󰧑` | glyph for the model tag (brain; `󰚩` robot, `󰘚` chip also fit) |
+| `modelIcon` | `󰧑` | glyph for the model segment (brain; `󰚩` robot, `󰘚` chip also fit) |
 | `agentsIcon` | `󰙴` | glyph for the agents badge (sparkles; `󰆍` console, `󱚣` robot also fit) |
 
 ## Status

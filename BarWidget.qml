@@ -72,28 +72,18 @@ Panel {
   readonly property int colW: Style.space(380)
   readonly property int menuW: Style.space(320)
 
-  // Bar stays glanceable: icon + short tag. models.conf `tag=` wins; otherwise
-  // initials of the words before the size marker + the size digits
-  // (gpt-oss-20b -> go20, qwen3-coder-30b-a3b -> qc30, llama3.2:3b -> l3).
-  function abbrev(id) {
-    if (root.modelTag) return root.modelTag
-    if (!id) return ""
-    var words = String(id).toLowerCase().split(/[-_:\/\s]+/).filter(function(w) { return w })
-    var size = -1
-    for (var i = 0; i < words.length; i++) if (/^\d+(\.\d+)?b$/.test(words[i])) { size = i; break }
-    if (size < 0) return words.join("").replace(/[^a-z0-9]/g, "").slice(0, 5)
-    var init = words.slice(0, size).map(function(w) { return w[0] }).join("").slice(0, 3)
-    return init + words[size].replace(/\.\d+b$|b$/, "")
-  }
-  function sdAbbrev(id) { return root.sdTag || String(id).slice(0, 5) }
-  // While generating: "<tag> 37%" once sd-cli reports a phase fraction, else "<tag> 1:05".
+  // The bar shows the full model id next to the glyph, never an abbreviation, so
+  // what is loaded is never in doubt. The unit instance is the id; the served alias
+  // stands in until the unit reports one.
+  function loadedName() { return root.modelId || root.model }
+  // While generating: "<id> 37%" once sd-cli reports a phase fraction, else "<id> 1:05".
   function busyText() {
     if (!root.busy) return ""
-    var b = root.busy, tag = b.model === root.sdModel ? root.sdAbbrev(b.model) : String(b.model).slice(0, 5)
+    var b = root.busy, name = String(b.model)
     var m = /^(\d+)\/(\d+)$/.exec(b.progress || "")
-    if (m && Number(m[2]) > 0) return tag + " " + Math.floor(100 * Number(m[1]) / Number(m[2])) + "%"
+    if (m && Number(m[2]) > 0) return name + " " + Math.floor(100 * Number(m[1]) / Number(m[2])) + "%"
     var s = Number(b.elapsed || 0)
-    return tag + " " + Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2)
+    return name + " " + Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2)
   }
   function ctxText(m) {
     var parts = []
@@ -342,10 +332,10 @@ Panel {
   // icon button is a fixed single-glyph slot that squashes anything longer.
   readonly property string clickHelp: "\nLeft: this group · Middle: all groups · Right: actions"
   function segmentText(g) {
-    if (g === "model") return root.modelIcon + (root.state === "ready" ? " " + root.abbrev(root.model) : root.state === "loading" ? " ···" : "")
+    if (g === "model") return root.modelIcon + (root.state === "ready" ? " " + root.loadedName() : root.state === "loading" ? " " + root.loadedName() + " ···" : "")
     // Like the other segments, a tag means something is loaded: the resident
     // sd-server's model, or the generation in flight. The selection lives in the panel.
-    if (g === "image") return root.imageIcon + (root.busy ? " " + root.busyText() : root.imageOn ? " " + root.sdAbbrev(root.sdModel) : "")
+    if (g === "image") return root.imageIcon + (root.busy ? " " + root.busyText() : root.imageOn ? " " + root.sdModel : "")
     return root.agentsIcon + (root.agents.length > 0 ? " " + root.agents.length : "")
   }
   function segmentDim(g) {
