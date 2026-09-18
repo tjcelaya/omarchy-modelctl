@@ -326,6 +326,9 @@ Panel {
 
   implicitWidth: segments.implicitWidth
   implicitHeight: segments.implicitHeight
+  // The bar's open-panel underline is centred on the slot and sized by this hint;
+  // every panel belongs to the whole widget, so it spans all shown segments.
+  readonly property real openPanelIndicatorWidth: Math.max(0, segments.width - Style.space(12))
 
   // ── bar segments ───────────────────────────────────────────────────────────
   // WidgetButton, not BarIconButton: these carry a glyph *and* a short tag, and the
