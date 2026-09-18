@@ -2,8 +2,8 @@
 # One JSON document for the bar widget and its dropdown: server state, every
 # discovered LLM and image model, the image generation in flight, every agent.
 set -u
-PORT="${MODELCTL_PORT:-8090}"
 D="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+PORT="${MODELCTL_PORT:-$("$D/modelctl" conf port 8090)}"
 ST="$HOME/.local/state/modelctl"
 
 active=""

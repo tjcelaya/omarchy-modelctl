@@ -11,7 +11,7 @@
   modelctl sd-list         image models: id|label|note|peak|steps|cfg|res|args|tag|status|family
   modelctl sd-args <id>    that model's sd-cli argv, NUL-separated (never word-split a path)
 
-Models are found under MODELCTL_MODEL_DIRS (colon-separated; default
+Models are found under model_dirs from models.conf [defaults] (colon-separated; default
 ~/.lmstudio/models:~/.cache/llama.cpp:~/models:~/.ollama/models), recursively,
 following symlinks. `mmproj-*.gguf` files are never models: one sitting next to
 a model is attached as its vision projector. Sharded models are launched from
@@ -33,9 +33,10 @@ import configparser, fnmatch, json, os, re, shlex, sys
 
 HOME = os.path.expanduser("~")
 CONF = os.environ.get("MODELCTL_CONF", f"{HOME}/.config/modelctl/models.conf")
-DIRS = os.environ.get("MODELCTL_MODEL_DIRS",
-                      f"{HOME}/.lmstudio/models:{HOME}/.cache/llama.cpp:{HOME}/models:{HOME}/.ollama/models").split(":")
-PORT = os.environ.get("MODELCTL_PORT", "8090")
+DEFAULT_DIRS = f"{HOME}/.lmstudio/models:{HOME}/.cache/llama.cpp:{HOME}/models:{HOME}/.ollama/models"
+# Filled from [defaults] by load_conf(); the MODELCTL_* environment still wins.
+DIRS = DEFAULT_DIRS.split(":")
+PORT = "8090"
 # Sane, hardware-agnostic defaults. Full GPU offload, flash attention, one slot
 # with prefix caching (agent prompts are re-sent every turn), --jinja because a
 # few templates (gemma-4) refuse to run without it.
@@ -46,11 +47,19 @@ SHARD_RE = re.compile(r"-(\d{5})-of-\d{5}$")
 
 
 def load_conf():
+    global DIRS, PORT
     cp = configparser.ConfigParser(interpolation=None)
     cp.optionxform = str
     if os.path.exists(CONF):
         cp.read(CONF)
+    dirs = os.environ.get("MODELCTL_MODEL_DIRS") or cp.get("defaults", "model_dirs", fallback=DEFAULT_DIRS)
+    DIRS = [os.path.expanduser(d) for d in dirs.split(":") if d]
+    PORT = os.environ.get("MODELCTL_PORT") or cp.get("defaults", "port", fallback="8090")
     return cp
+
+
+def sd_port(cp):
+    return os.environ.get("MODELCTL_SD_PORT") or cp.get("defaults", "sd_port", fallback="8091")
 
 
 def conf_for(cp, mid):
@@ -297,11 +306,11 @@ def main(argv):
         sd = sd_dir(cp)
         ck = cp.get("defaults", "sd_server_model", fallback="sd_turbo.safetensors")
         os.execvp("sd-server", ["sd-server", "-m", os.path.join(sd, ck), "--type", "f16",
-                                "--listen-ip", "127.0.0.1", "--listen-port", os.environ.get("MODELCTL_SD_PORT", "8091")] + argv[1:])
+                                "--listen-ip", "127.0.0.1", "--listen-port", sd_port(cp)] + argv[1:])
     models = discover(cp)
     if cmd == "list":
         if not models:
-            sys.exit("modelctl: no .gguf files under " + ":".join(DIRS) + " (set MODELCTL_MODEL_DIRS)")
+            sys.exit("modelctl: no .gguf files under " + ":".join(DIRS) + " (set model_dirs under [defaults] in " + CONF + ")")
         if "--tsv" in argv:
             for m in models:
                 print("\t".join([m["id"], m["label"], m["tag"], str(m["ctx"]), m["note"], m["path"],

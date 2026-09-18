@@ -7,7 +7,7 @@ set -uo pipefail
 systemctl --user stop 'modelctl@*.service' modelctl.service 2>/dev/null
 rm -f ~/.config/systemd/user/modelctl.service ~/.config/systemd/user/modelctl@.service
 systemctl --user daemon-reload
-rm -f ~/.local/bin/modelctl
+rm -f ~/.local/bin/modelctl ~/.local/share/man/man1/modelctl.1
 rm -f ~/.config/omarchy/bar/scripts/modelctl-*   # pre-1.0 layout
 EXT=~/.config/omarchy/extensions/omarchy-menu.jsonc
 if [ -f "$EXT" ]; then   # drop only our modelctl.* keys; leave other extensions alone

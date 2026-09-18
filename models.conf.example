@@ -12,7 +12,11 @@
 #        tag    ≤5-char text shown next to the bar icon (default: derived from label)
 #        note   one line for the menu description / `modelctl list`
 #        mmproj vision projector path (default: an mmproj-*.gguf in the same folder)
-# [defaults]-only keys for image generation:
+# [defaults]-only keys:
+#        model_dirs      colon-separated folders scanned for GGUF models
+#        port            llama-server port (the bar's Local models group)
+#        image_dir       where generated images are saved
+#        sd_port         port of the resident sd-server
 #        sd_dir          checkpoint folder for modelctl-image / sd-server
 #        sd_server_model checkpoint the resident sd-server loads
 #        sd_check        true -> `modelctl-image --check <id>` smoke-tests a model and
@@ -23,6 +27,12 @@
 [defaults]
 default = gpt-oss-20b*
 # hide = Qwen2.5-0.5B* *test*
+# Where models are looked for and where images land. The MODELCTL_MODEL_DIRS /
+# MODELCTL_IMAGE_DIR / MODELCTL_PORT environment variables override these per run.
+# model_dirs = ~/.lmstudio/models:~/.cache/llama.cpp:~/models:~/.ollama/models
+# port = 8090
+# image_dir = ~/Pictures/generated
+# sd_port = 8091
 # Measured on a Radeon 760M with a 23.5 GiB Vulkan pool (see TUNING.md): q8 KV cache
 # lets a 20B model run at full 131k context. Drop -ctk/-ctv on a dGPU with room.
 args = -ngl 99 -fa on -ctk q8_0 -ctv q8_0 -np 1 --cache-reuse 256 --jinja
@@ -30,6 +40,14 @@ sd_dir = ~/.local/share/stable-diffusion/models
 sd_server_model = sd_turbo.safetensors
 # sd_check = true
 # sd_retry_no_fa = false
+
+# Sampler settings for every image model at once (an [sd:<id>] section further down
+# overrides these for one model). Planned: the Generate image… dialog will offer
+# steps, size and the output folder as inputs, so these become the defaults it opens with.
+# [sd:*]
+# steps = 4
+# cfg = 1.0
+# res = 512
 
 [gpt-oss-20b*]
 ctx = 131072

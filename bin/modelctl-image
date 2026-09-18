@@ -170,9 +170,9 @@ load_args "$MODEL"
 # The token after -m / --diffusion-model is the checkpoint; check it exists so failures are loud.
 CKPT=""; for i in "${!ARGV[@]}"; do case "${ARGV[$i]}" in -m|--diffusion-model) CKPT="${ARGV[$((i+1))]:-}"; break;; esac; done
 [ -f "$CKPT" ] || { notify -u critical "Missing checkpoint" "${CKPT:-no -m/--diffusion-model in args}"; exit 1; }
-# Where images land. Override per-invocation, or set MODELCTL_IMAGE_DIR in the
-# environment / the plugin's imageDir setting for a permanent change.
-OUT="${MODELCTL_IMAGE_DIR:-$HOME/Pictures/generated}"
+# Where images land: image_dir under [defaults] in models.conf; MODELCTL_IMAGE_DIR
+# overrides for one invocation.
+OUT="${MODELCTL_IMAGE_DIR:-$(conf image_dir "$HOME/Pictures/generated")}"
 mkdir -p "$OUT" 2>/dev/null || { notify -u critical "Cannot write" "$OUT"; exit 1; }
 
 prompt="${*:-}"

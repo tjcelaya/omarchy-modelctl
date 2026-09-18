@@ -20,9 +20,7 @@
     "defaultSection": "center",
     "defaults": {
       "refreshIntervalSec": 5,
-      "port": 8090,
       "showCwd": true,
-      "imageDir": "~/Pictures/generated",
       "agentsIcon": "󰙴",
       "modelIcon": "󰧑",
       "order": "agents,model,image"
@@ -38,25 +36,10 @@
         "defaultValue": 5
       },
       {
-        "key": "port",
-        "type": "integer",
-        "label": "llama-server port",
-        "min": 1024,
-        "max": 65535,
-        "step": 1,
-        "defaultValue": 8090
-      },
-      {
         "key": "showCwd",
         "type": "boolean",
         "label": "Show agent working directory",
         "defaultValue": true
-      },
-      {
-        "key": "imageDir",
-        "type": "string",
-        "label": "Generated image folder",
-        "defaultValue": "~/Pictures/generated"
       },
       {
         "key": "order",
