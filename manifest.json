@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "tjcelaya.modelctl",
   "name": "modelctl",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "tjcelaya",
   "license": "MIT",
   "description": "Local llama.cpp and stable-diffusion.cpp model control plus a live coding-agent list, as three dropdowns in the Omarchy bar.",

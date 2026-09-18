@@ -19,7 +19,7 @@ Manual steps (nothing here is automated on purpose):
 
 1. ~~Create the repo~~ done: https://github.com/tjcelaya/omarchy-modelctl
 2. ~~Topics~~ done: `omarchy`, `omarchy-plugin`, `llama-cpp`, `stable-diffusion`.
-3. Tag the release: `git tag v0.2.0 && git push --tags` (bump `version` in
+3. Tag the release: `git tag v0.2.1 && git push --tags` (bump `version` in
    `manifest.json` for every later release; `omarchy plugin update` pulls HEAD).
 4. Smoke-test the real install path on this machine:
        uninstall.sh; omarchy plugin remove tjcelaya.modelctl
