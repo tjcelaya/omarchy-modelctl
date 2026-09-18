@@ -660,7 +660,7 @@ Panel {
                   title: modelData.name + " · " + (String(modelData.cwd).replace(/\/$/, "").split("/").pop() || modelData.cwd)
                   subtitle: [modelData.cwd, modelData.status, modelData.pane].filter(function(x) { return x }).join(" · ")
                   icon: modelData.status === "working" ? "󰑮" : "󰆍"
-                  current: modelData.focused === true
+                  marks: false
                   tip: "Focus this agent"
                   onActivated: root.focusAgent(modelData)
                 }
@@ -699,6 +699,7 @@ Panel {
                 title: modelData.label
                 subtitle: modelData.sub
                 icon: modelData.icon
+                marks: false
                 current: index === root.menuIndex
                 onActivated: root.menuActivate(index)
               }
@@ -793,13 +794,15 @@ Panel {
     }
   }
 
-  // Two-line selectable row: icon · title / subtitle · check when current.
+  // Two-line row: icon · title / subtitle · check when current. Rows that are
+  // shortcuts rather than selections (agents, menu actions) show no mark.
   component ModelRow: CursorSurface {
     id: row
     property string title: ""
     property string subtitle: ""
     property string icon: ""
     property bool pending: false
+    property bool marks: true
     property string tip: ""
     signal activated()
     hasCursor: rowMouse.containsMouse && row.enabled
@@ -842,7 +845,7 @@ Panel {
       Text {
         id: mark
         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-        text: row.pending ? "…" : row.current ? "󰄬" : ""
+        text: !row.marks ? "" : row.pending ? "…" : row.current ? "󰄬" : ""
         color: root.fg; font.family: root.fam; font.pixelSize: Style.font.heading
         width: implicitWidth
       }
