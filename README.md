@@ -5,17 +5,17 @@ running [herdr](https://github.com/tjcelaya/herdr) coding agent at a glance.
 
 ![modelctl in the Omarchy bar and its menu](preview.png)
 
-    󰚩oss20  󰋩  󱃒2
+    󰚩oss20  󰋩  󰙴2
 
 - **Model** (`󰚩` + abbreviation) — left-click opens the dropdown, middle-click stops
   the server, right-click tails its journal.
 - **Images** (`󰋩` + tag of the selected model, or `chrm 37%` while one is generating) —
   left-click opens the dropdown, right-click generates an image with the selected model.
   Dim = one-shot, bright = resident `sd-server`.
-- **Agents** (`󱃒` + count; glyph via the `agentsIcon` setting) — dim with no
-  number when nothing is running, lit with a count otherwise. Click opens the agents
-  submenu: every running coding agent with its directory and status; selecting one
-  focuses it. Detected: herdr panes (status + pane focus) and any `claude`,
+- **Agents** (`󰙴` + count; glyph via the `agentsIcon` setting) — dim with no
+  number when nothing is running, lit with a count otherwise. Click opens the dropdown
+  scrolled to the agents section: every running coding agent with its directory and
+  status; selecting one focuses it. Detected: herdr panes (status + pane focus) and any `claude`,
   `opencode`, `codex`, … process with a TTY inside a Hyprland window — a plain
   terminal, `omarchy agent`, etc. (window focus). Search matches agent name and
   every path segment. tmux panes: planned.
@@ -169,9 +169,13 @@ switch for the LLM server, the `llama.cpp` list (click to load, check on the loa
 one), the `stable-diffusion` list (click to select for the 󰋩 button; `parks the LLM`
 where the peak would not fit; greyed out with the missing companion file), a
 *Keep image server loaded* toggle, *Generate image…*, and the running agents (click to
-focus). `Esc` closes, `g` generates, `s` toggles the server. `omarchy shell
-tjcelaya.modelctl toggle` opens it from anywhere. The Omarchy quick menu keeps only a
-launcher entry and the searchable **Agents** submenu.
+focus). Every list is shown in full; when the whole panel is taller than the screen it
+scrolls as one surface (wheel, drag, `j`/`k` or the arrow keys), so the agents at the
+bottom stay reachable however many models sit above them. `a` jumps to the agents
+section, and the `󰙴` bar badge opens the panel already scrolled there. `Esc` closes,
+`g` generates, `s` toggles the server. `omarchy shell tjcelaya.modelctl toggle` opens it
+from anywhere. The Omarchy quick menu keeps only a launcher entry and the searchable
+**Agents** submenu.
 
 ### Tuning: `~/.config/modelctl/models.conf`
 
@@ -203,15 +207,17 @@ Exposed through the plugin manifest, editable in Omarchy's settings UI:
 | `showCwd` | true | show each agent's working directory |
 | `imageDir` | `~/Pictures/generated` | where generated images are saved |
 | `modelIcon` | `󰚩` | glyph for the model tag (see `BarWidget.qml` for tested alternatives) |
-| `agentsIcon` | `󱃒` | glyph for the agents badge |
+| `agentsIcon` | `󰙴` | glyph for the agents badge (sparkles; `󰆍` console, `󱚣` robot also fit) |
 
 ## Status
 
-**v0.1.0, works on one machine.** The QML widget is new and less battle-tested than
+**v0.1.1, works on one machine.** The QML widget is newer and less battle-tested than
 the shell scripts behind it. Known gaps:
 
 - Context sizes come from `models.conf` (16k default), not computed from free VRAM.
-- Only herdr-managed agents are listed; plain tmux panes are a planned addition.
-- The dropdown still uses Omarchy's menu via a generated JSONC file, because the
-  menu's `provider` mechanism is a closed set hardcoded in `Menu.qml`. A native
-  popup panel would remove that.
+- herdr panes and agent processes inside Hyprland windows are listed; plain tmux
+  panes are a planned addition.
+- The searchable **Agents** submenu in the quick menu is a generated JSONC file,
+  because the menu's `provider` mechanism is a closed set hardcoded in `Menu.qml`.
+  Its 300px card truncates long working directories (the full path is in the row's
+  description, visible while searching).

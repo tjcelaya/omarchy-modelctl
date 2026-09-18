@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -15,7 +16,7 @@ Panel {
 
   readonly property int refreshSec: (settings && settings.refreshIntervalSec) || 5
   readonly property string modelIcon:  (settings && settings.modelIcon) || "󰚩"
-  readonly property string agentsIcon: (settings && settings.agentsIcon) || "󱃒"
+  readonly property string agentsIcon: (settings && settings.agentsIcon) || "󰙴"
   readonly property string imageIcon: "󰋩"
 
   // ── state, refreshed from modelctl-barjson ───────────────────────────────
@@ -123,6 +124,23 @@ Panel {
     if (a && Array.isArray(a.focus) && a.focus.length) root.run(a.focus)
   }
 
+  // The panel is one scrolling surface: when the lists outgrow the screen, every
+  // section stays reachable by wheel, drag, j/k, or a jump straight to the agents.
+  function scrollTo(y) { flick.contentY = Math.max(0, Math.min(y, flick.contentHeight - flick.height)) }
+  function scrollBy(steps) { root.scrollTo(flick.contentY + steps * Style.space(56)) }
+  function jumpToAgents() { Qt.callLater(function() { root.scrollTo(agentsSection.y) }) }
+  property bool jumpOnOpen: false
+  function openAtAgents() {
+    if (root.opened) { root.close(); return }
+    root.jumpOnOpen = true
+    root.open()
+  }
+  onOpenedChanged: {
+    if (!opened) return
+    if (root.jumpOnOpen) root.jumpToAgents(); else flick.contentY = 0
+    root.jumpOnOpen = false
+  }
+
   Process {
     id: poll
     // Login shell for the session PATH (sd-cli, herdr live in ~/.local/bin); the
@@ -209,7 +227,7 @@ Panel {
       text: root.agentsIcon + (root.agents.length > 0 ? " " + root.agents.length : "")
       dimmed: root.agents.length === 0
       tooltipText: root.agents.length === 0 ? "No coding agents running" : root.agents.length + " agent(s) running · click for the list"
-      onPressed: function(b) { root.toggle() }
+      onPressed: function(b) { root.openAtAgents() }
     }
   }
 
@@ -222,179 +240,190 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(400))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight)   // clamps to the screen; lists cap themselves
+    contentHeight: panel.fittedContentHeight(column.implicitHeight)   // clamps to the screen; the content scrolls
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
+      onMoveRequested: function(dx, dy) { if (dy !== 0) root.scrollBy(dy) }
       onTextKey: function(t) {
         if (t === "g" || t === "G") root.generate()
         if (t === "s" || t === "S") root.toggleServer()
+        if (t === "a" || t === "A") root.jumpToAgents()
       }
 
-      Column {
-        id: column
+      Flickable {
+        id: flick
         anchors.fill: parent
-        spacing: Style.space(12)
+        contentWidth: width
+        contentHeight: column.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        interactive: contentHeight > height
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-        // ---------- Hero: icon · title · status · server switch ----------
-        Item {
-          width: parent.width
-          implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight, serverSwitch.implicitHeight)
+        Column {
+          id: column
+          width: flick.width
+          spacing: Style.space(12)
 
+          // ---------- Hero: icon · title · status · server switch ----------
+          Item {
+            width: parent.width
+            implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight, serverSwitch.implicitHeight)
+
+            Text {
+              id: heroIcon
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.modelIcon
+              color: root.fg
+              font.family: root.fam
+              font.pixelSize: Style.font.display
+              opacity: root.state === "ready" ? 1.0 : 0.5
+            }
+            ToggleSwitch {
+              id: serverSwitch
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              checked: root.state !== "off"
+              busy: root.state === "loading" || root.pendingLlm !== ""
+              interactive: root.llms.length > 0
+              foreground: root.fg
+              onToggled: root.toggleServer()
+              PanelToolTip {
+                visible: serverSwitch.containsMouse
+                text: root.state !== "off" ? "Stop the LLM server" : "Start the default model"
+                fontFamily: root.fam
+              }
+            }
+            Column {
+              id: heroLabels
+              anchors.left: heroIcon.right
+              anchors.leftMargin: Style.space(14)
+              anchors.right: serverSwitch.left
+              anchors.rightMargin: Style.space(12)
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(2)
+              Text {
+                text: "Local models"
+                color: root.fg; font.family: root.fam; font.pixelSize: Style.font.title; font.bold: true
+                elide: Text.ElideRight; width: parent.width
+              }
+              Text {
+                text: root.heroStatus().toUpperCase()
+                color: root.dim; font.family: root.fam; font.pixelSize: Style.font.caption
+                font.bold: true; font.letterSpacing: 1.2
+                elide: Text.ElideRight; width: parent.width
+              }
+            }
+          }
+
+          PanelSeparator { foreground: root.fg }
+
+          // ---------- llama.cpp ----------
+          SectionTitle { text: "LLAMA.CPP"; trailing: root.llms.length + " model" + (root.llms.length === 1 ? "" : "s") }
           Text {
-            id: heroIcon
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.modelIcon
-            color: root.fg
-            font.family: root.fam
-            font.pixelSize: Style.font.display
-            opacity: root.state === "ready" ? 1.0 : 0.5
+            visible: root.llms.length === 0
+            width: parent.width; wrapMode: Text.WordWrap
+            text: "No GGUF models found. Put some under MODELCTL_MODEL_DIRS, or pull one with LM Studio or Ollama."
+            color: root.dim; font.family: root.fam; font.pixelSize: Style.font.bodySmall
           }
-          ToggleSwitch {
-            id: serverSwitch
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            checked: root.state !== "off"
-            busy: root.state === "loading" || root.pendingLlm !== ""
-            interactive: root.llms.length > 0
-            foreground: root.fg
-            onToggled: root.toggleServer()
-            PanelToolTip {
-              visible: serverSwitch.containsMouse
-              text: root.state !== "off" ? "Stop the LLM server" : "Start the default model"
-              fontFamily: root.fam
-            }
-          }
-          Column {
-            id: heroLabels
-            anchors.left: heroIcon.right
-            anchors.leftMargin: Style.space(14)
-            anchors.right: serverSwitch.left
-            anchors.rightMargin: Style.space(12)
-            anchors.verticalCenter: parent.verticalCenter
+          ListView {
+            id: llmList
+            width: parent.width
+            height: contentHeight
+            interactive: false
             spacing: Style.space(2)
-            Text {
-              text: "Local models"
-              color: root.fg; font.family: root.fam; font.pixelSize: Style.font.title; font.bold: true
-              elide: Text.ElideRight; width: parent.width
+            model: root.llms
+            delegate: ModelRow {
+              required property var modelData
+              width: ListView.view.width
+              title: modelData.label
+              subtitle: root.ctxText(modelData)
+              icon: modelData.vision ? "󰄀" : "󰘚"
+              current: root.modelId === modelData.id || (root.model !== "" && root.model === modelData.label)
+              pending: root.pendingLlm === modelData.id || (root.state === "loading" && root.modelId === modelData.id)
+              tip: current ? "Loaded · click to stop" : "Load with llama-server"
+              onActivated: current ? root.stopLlm() : root.switchLlm(modelData.id)
             }
-            Text {
-              text: root.heroStatus().toUpperCase()
-              color: root.dim; font.family: root.fam; font.pixelSize: Style.font.caption
-              font.bold: true; font.letterSpacing: 1.2
-              elide: Text.ElideRight; width: parent.width
+          }
+
+          PanelSeparator { foreground: root.fg }
+
+          // ---------- stable-diffusion ----------
+          SectionTitle {
+            text: "STABLE-DIFFUSION"
+            trailing: root.busy ? "generating · " + root.busyText() : root.sds.length + " model" + (root.sds.length === 1 ? "" : "s")
+          }
+          Text {
+            visible: root.sds.length === 0
+            width: parent.width; wrapMode: Text.WordWrap
+            text: "No checkpoints found. Put .safetensors / .gguf checkpoints (and their VAE / text encoders) under sd_dir in ~/.config/modelctl/models.conf."
+            color: root.dim; font.family: root.fam; font.pixelSize: Style.font.bodySmall
+          }
+          ListView {
+            id: sdList
+            width: parent.width
+            height: contentHeight
+            interactive: false
+            spacing: Style.space(2)
+            model: root.sds
+            delegate: ModelRow {
+              required property var modelData
+              width: ListView.view.width
+              readonly property bool runnable: modelData.status === "ok"
+              title: modelData.label
+              subtitle: modelData.note + (modelData.peak > 9000 ? " · parks the LLM" : "")
+              icon: root.busy && root.busy.model === modelData.id ? "󰔟" : "󰋩"
+              current: root.sdModel === modelData.id
+              enabled: runnable
+              tip: runnable ? "Select for the bar's " + root.imageIcon + " button" : "Cannot run: " + modelData.status
+              onActivated: if (runnable) root.selectSd(modelData.id)
             }
           }
-        }
-
-        PanelSeparator { foreground: root.fg }
-
-        // ---------- llama.cpp ----------
-        SectionTitle { text: "LLAMA.CPP"; trailing: root.llms.length + " model" + (root.llms.length === 1 ? "" : "s") }
-        Text {
-          visible: root.llms.length === 0
-          width: parent.width; wrapMode: Text.WordWrap
-          text: "No GGUF models found. Put some under MODELCTL_MODEL_DIRS, or pull one with LM Studio or Ollama."
-          color: root.dim; font.family: root.fam; font.pixelSize: Style.font.bodySmall
-        }
-        ListView {
-          id: llmList
-          width: parent.width
-          height: Math.min(contentHeight, Style.space(240))
-          clip: true
-          boundsBehavior: Flickable.StopAtBounds
-          spacing: Style.space(2)
-          model: root.llms
-          delegate: ModelRow {
-            required property var modelData
-            width: ListView.view.width
-            title: modelData.label
-            subtitle: root.ctxText(modelData)
-            icon: modelData.vision ? "󰄀" : "󰘚"
-            current: root.modelId === modelData.id || (root.model !== "" && root.model === modelData.label)
-            pending: root.pendingLlm === modelData.id || (root.state === "loading" && root.modelId === modelData.id)
-            tip: current ? "Loaded · click to stop" : "Load with llama-server"
-            onActivated: current ? root.stopLlm() : root.switchLlm(modelData.id)
+          Toggle {
+            width: parent.width
+            label: "Keep image server loaded"
+            description: "Resident sd-server on :8091 · off = each image loads its model fresh"
+            checked: root.imageOn
+            foreground: root.fg; fontFamily: root.fam
+            onClicked: root.toggleImageServer()
           }
-        }
-
-        PanelSeparator { foreground: root.fg }
-
-        // ---------- stable-diffusion ----------
-        SectionTitle {
-          text: "STABLE-DIFFUSION"
-          trailing: root.busy ? "generating · " + root.busyText() : root.sds.length + " model" + (root.sds.length === 1 ? "" : "s")
-        }
-        Text {
-          visible: root.sds.length === 0
-          width: parent.width; wrapMode: Text.WordWrap
-          text: "No checkpoints found. Put .safetensors / .gguf checkpoints (and their VAE / text encoders) under sd_dir in ~/.config/modelctl/models.conf."
-          color: root.dim; font.family: root.fam; font.pixelSize: Style.font.bodySmall
-        }
-        ListView {
-          id: sdList
-          width: parent.width
-          height: Math.min(contentHeight, Style.space(200))
-          clip: true
-          boundsBehavior: Flickable.StopAtBounds
-          spacing: Style.space(2)
-          model: root.sds
-          delegate: ModelRow {
-            required property var modelData
-            width: ListView.view.width
-            readonly property bool runnable: modelData.status === "ok"
-            title: modelData.label
-            subtitle: modelData.note + (modelData.peak > 9000 ? " · parks the LLM" : "")
-            icon: root.busy && root.busy.model === modelData.id ? "󰔟" : "󰋩"
-            current: root.sdModel === modelData.id
-            enabled: runnable
-            tip: runnable ? "Select for the bar's " + root.imageIcon + " button" : "Cannot run: " + modelData.status
-            onActivated: if (runnable) root.selectSd(modelData.id)
+          Button {
+            width: parent.width
+            text: root.busy ? "Generate another image…  (queues)" : "Generate image…"
+            iconText: root.imageIcon
+            tooltipText: "Prompt via the Omarchy input popup · uses " + (root.sdModel || "the selected model")
+            foreground: root.fg; fontFamily: root.fam
+            onClicked: root.generate()
           }
-        }
-        Toggle {
-          width: parent.width
-          label: "Keep image server loaded"
-          description: "Resident sd-server on :8091 · off = each image loads its model fresh"
-          checked: root.imageOn
-          foreground: root.fg; fontFamily: root.fam
-          onClicked: root.toggleImageServer()
-        }
-        Button {
-          width: parent.width
-          text: root.busy ? "Generate another image…  (queues)" : "Generate image…"
-          iconText: root.imageIcon
-          tooltipText: "Prompt via the Omarchy input popup · uses " + (root.sdModel || "the selected model")
-          foreground: root.fg; fontFamily: root.fam
-          onClicked: root.generate()
-        }
 
-        PanelSeparator { foreground: root.fg }
+          PanelSeparator { foreground: root.fg }
 
-        // ---------- agents ----------
-        SectionTitle { text: "AGENTS"; trailing: root.agents.length === 0 ? "none running" : root.agents.length + " running" }
-        ListView {
-          id: agentList
-          visible: root.agents.length > 0
-          width: parent.width
-          height: Math.min(contentHeight, Style.space(160))
-          clip: true
-          boundsBehavior: Flickable.StopAtBounds
-          spacing: Style.space(2)
-          model: root.agents
-          delegate: ModelRow {
-            required property var modelData
-            width: ListView.view.width
-            title: modelData.name + " · " + (String(modelData.cwd).replace(/\/$/, "").split("/").pop() || modelData.cwd)
-            subtitle: [modelData.cwd, modelData.status, modelData.pane].filter(function(x) { return x }).join(" · ")
-            icon: modelData.status === "working" ? "󰑮" : "󰆍"
-            current: modelData.focused === true
-            tip: "Focus this agent"
-            onActivated: root.focusAgent(modelData)
+          // ---------- agents ----------
+          SectionTitle { id: agentsSection; text: "AGENTS"; trailing: root.agents.length === 0 ? "none running" : root.agents.length + " running" }
+          ListView {
+            id: agentList
+            visible: root.agents.length > 0
+            width: parent.width
+            height: contentHeight
+            interactive: false
+            spacing: Style.space(2)
+            model: root.agents
+            delegate: ModelRow {
+              required property var modelData
+              width: ListView.view.width
+              title: modelData.name + " · " + (String(modelData.cwd).replace(/\/$/, "").split("/").pop() || modelData.cwd)
+              subtitle: [modelData.cwd, modelData.status, modelData.pane].filter(function(x) { return x }).join(" · ")
+              icon: modelData.status === "working" ? "󰑮" : "󰆍"
+              current: modelData.focused === true
+              tip: "Focus this agent"
+              onActivated: root.focusAgent(modelData)
+            }
           }
         }
       }

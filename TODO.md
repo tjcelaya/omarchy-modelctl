@@ -36,10 +36,10 @@ the normal browsing view. Worth raising together — both push authors to cram
 context into a 20-char label.
 
 **Workaround in place:** labels shortened to fit; detail moved into descriptions
-that are usually invisible. Being probed: whether `\n` inside a label renders as
-two lines (labelText has `elide: ElideRight` and no `wrapMode`, so it may clip).
+that are usually invisible.
 
-**Real fix for this plugin:** stop using the shared menu. Render our own popup
-panel — own width, two columns (running agents | loadable models), management
-actions on their own row. Blocked on whether a third-party plugin can import
-`Panel` from `qs.Ui`; untested.
+**Scope today:** only the searchable `modelctl.agents` submenu still lives in the
+shared menu, so the truncation affects agent working directories there. Models,
+image models and the agent list are rendered by the plugin's own `KeyboardPanel`
+dropdown (a third-party plugin can import `Panel` / `KeyboardPanel` from `qs.Ui`),
+which sizes itself and scrolls.

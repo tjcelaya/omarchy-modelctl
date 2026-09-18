@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "tjcelaya.modelctl",
   "name": "modelctl",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "tjcelaya",
   "license": "MIT",
   "description": "Local llama.cpp model server control plus live herdr agent list in the Omarchy bar.",
@@ -23,7 +23,7 @@
       "port": 8090,
       "showCwd": true,
       "imageDir": "~/Pictures/generated",
-      "agentsIcon": "󱃒",
+      "agentsIcon": "󰙴",
       "modelIcon": "󰚩"
     },
     "schema": [
@@ -60,8 +60,8 @@
       {
         "key": "agentsIcon",
         "type": "string",
-        "label": "Agents badge glyph (suggestions: 󰆍 console, 󰞷 >_, 󱚝 󱚞 robots)",
-        "defaultValue": "󱃒"
+        "label": "Agents badge glyph (suggestions: 󰆍 console, 󰞷 >_,  agent, 󱚣 robot)",
+        "defaultValue": "󰙴"
       },
       {
         "key": "modelIcon",
