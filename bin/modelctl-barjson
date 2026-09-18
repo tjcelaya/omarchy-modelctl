@@ -29,7 +29,16 @@ sd=$(cat "$ST/sd-model" 2>/dev/null); sd="${sd:-$("$D/modelctl" sd-list 2>/dev/n
 # A generation in flight: model, seconds elapsed, and the sampler's "n/N" if the log has one.
 busy=""; if [ -f "$ST/image.busy" ]; then
   IFS=$'\t' read -r bmodel bstart blog bprompt _ < "$ST/image.busy"
-  if [ -f "$blog" ]; then prog=$(tail -c 4000 "$blog" 2>/dev/null | tr '\r' '\n' | grep -oE '[0-9]+/[0-9]+ -' | tail -1 | cut -d' ' -f1); else prog=""; fi
+  # sd-cli prints one progress bar per phase: tensor loads end in B/s, sampling
+  # steps in s/it or it/s. Report the phase, not the last fraction seen, or the bar
+  # would read 100% after a load and drop to 5% at the first step.
+  #   load           still loading weights
+  #   n/N [rate]     sampling step n of N, with the step rate if known
+  #   decode         every step done, VAE decoding
+  if [ -f "$blog" ]; then prog=$(tr '\r' '\n' < "$blog" 2>/dev/null | grep -oE '[0-9]+/[0-9]+ - [0-9.]+[A-Za-z/]+' | awk '
+    /B\/s$/ { phase = "load"; next }
+    /(s\/it|it\/s)$/ { split($1, f, "/"); phase = $1; rate = $3; if (f[1] == f[2]) phase = "decode" }
+    END { if (phase == "decode" || phase == "load") print phase; else if (phase != "") print phase, rate }'); else prog=""; fi
   busy="$bmodel"$'\t'"$(( $(date +%s) - bstart ))"$'\t'"${prog:-}"$'\t'"$bprompt"
 fi
 freemem=$(free -m | awk '/Mem:/ {printf "%.1f GiB", $7/1024}')

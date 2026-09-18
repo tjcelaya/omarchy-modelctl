@@ -197,7 +197,7 @@ gen
 if [ "$RC" != 0 ]; then
   classify "$LOG" "$RC"
   if [ "$CLASS" = device-lost ] && istrue "$(conf sd_retry_no_fa true)" && has_fa; then
-    notify -i image "GPU hung — retrying without flash attention" "$MODEL · $prompt"
+    notify -i image "GPU hung — retrying without flash attention" "$MODEL · $prompt · expect it to be several times slower"
     drop_fa
     LOG="$ST/logs/$stamp-$MODEL-retry.log"; gen
     [ "$RC" != 0 ] && classify "$LOG" "$RC"

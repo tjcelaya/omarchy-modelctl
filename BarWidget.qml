@@ -76,14 +76,22 @@ Panel {
   // what is loaded is never in doubt. The unit instance is the id; the served alias
   // stands in until the unit reports one.
   function loadedName() { return root.modelId || root.model }
-  // While generating: "<id> 37%" once sd-cli reports a phase fraction, else "<id> 1:05".
+  // While generating: the phase sd-cli is in — "<id> 3/20" during sampling,
+  // "loading" / "decoding" around it — with the elapsed time until a step lands.
+  function busyPhase() {
+    var p = root.busy ? String(root.busy.progress || "") : ""
+    if (p === "load") return "loading"
+    if (p === "decode") return "decoding"
+    var m = /^(\d+\/\d+)(?:\s+(\S+))?$/.exec(p)
+    return m ? "step " + m[1] + (m[2] ? " · " + m[2] : "") : ""
+  }
   function busyText() {
     if (!root.busy) return ""
-    var b = root.busy, name = String(b.model)
-    var m = /^(\d+)\/(\d+)$/.exec(b.progress || "")
-    if (m && Number(m[2]) > 0) return name + " " + Math.floor(100 * Number(m[1]) / Number(m[2])) + "%"
-    var s = Number(b.elapsed || 0)
-    return name + " " + Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2)
+    var b = root.busy, name = String(b.model), s = Number(b.elapsed || 0)
+    var clock = Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2)
+    var m = /^(\d+\/\d+)/.exec(String(b.progress || ""))
+    if (m) return name + " " + m[1]
+    return name + " " + clock
   }
   function ctxText(m) {
     var parts = []
@@ -98,7 +106,7 @@ Panel {
     return "Nothing loaded" + (root.freeMem ? " · " + root.freeMem + " free" : "")
   }
   function imageStatus() {
-    if (root.busy) return "Generating · " + root.busyText()
+    if (root.busy) return "Generating · " + (root.busyPhase() || "starting") + " · " + Math.floor(Number(root.busy.elapsed || 0) / 60) + ":" + ("0" + (Number(root.busy.elapsed || 0) % 60)).slice(-2)
     if (!root.sdModel) return root.sds.length ? "No model selected" : "No checkpoints found"
     return root.sdModel + (root.imageOn ? " · server on :8091" : " · loads per image")
   }
@@ -348,7 +356,7 @@ Panel {
   }
   function segmentTip(g) {
     if (g === "model") return root.heroStatus()
-    if (g === "image") return root.busy ? "Generating with " + root.busy.model + " · " + root.busy.prompt : "Image model: " + (root.sdModel || "none")
+    if (g === "image") return root.busy ? "Generating with " + root.busy.model + " · " + (root.busyPhase() || "starting") + "\n" + root.busy.prompt : "Image model: " + (root.sdModel || "none")
     return root.agents.length === 0 ? "No coding agents running" : root.agents.length + " agent(s) running"
   }
   Row {
