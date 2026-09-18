@@ -5,7 +5,7 @@
   "version": "0.1.1",
   "author": "tjcelaya",
   "license": "MIT",
-  "description": "Local llama.cpp model server control plus live herdr agent list in the Omarchy bar.",
+  "description": "Local llama.cpp and stable-diffusion.cpp model control plus a live coding-agent list, as three dropdowns in the Omarchy bar.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "modelctl",
-    "description": "Shows the loaded local model and every running herdr agent. Click a model to switch, an agent to focus its pane.",
+    "description": "Segments for the running coding agents, the loaded local model and the image model. Left click opens that group, middle click opens all, right click opens the group's actions.",
     "category": "AI",
     "allowMultiple": false,
     "defaultSection": "center",
@@ -24,7 +24,8 @@
       "showCwd": true,
       "imageDir": "~/Pictures/generated",
       "agentsIcon": "󰙴",
-      "modelIcon": "󰚩"
+      "modelIcon": "󰧑",
+      "order": "agents,model,image"
     },
     "schema": [
       {
@@ -58,6 +59,12 @@
         "defaultValue": "~/Pictures/generated"
       },
       {
+        "key": "order",
+        "type": "string",
+        "label": "Groups shown, left to right: agents (always), model, image",
+        "defaultValue": "agents,model,image"
+      },
+      {
         "key": "agentsIcon",
         "type": "string",
         "label": "Agents badge glyph (suggestions: 󰆍 console, 󰞷 >_,  agent, 󱚣 robot)",
@@ -66,8 +73,8 @@
       {
         "key": "modelIcon",
         "type": "string",
-        "label": "Model glyph (suggestions: 󰧑 brain, 󰘚 chip, 󰻠 cpu, 󰍛 memory)",
-        "defaultValue": "󰚩"
+        "label": "Model glyph (suggestions: 󰚩 robot, 󰘚 chip, 󰻠 cpu, 󰍛 memory)",
+        "defaultValue": "󰧑"
       }
     ]
   }

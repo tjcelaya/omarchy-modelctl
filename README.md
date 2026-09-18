@@ -5,22 +5,33 @@ running [herdr](https://github.com/tjcelaya/herdr) coding agent at a glance.
 
 ![modelctl in the Omarchy bar and its menu](preview.png)
 
-    󰚩oss20  󰋩  󰙴2
+    󰙴2  󰧑oss20  󰋩
 
-- **Model** (`󰚩` + abbreviation) — left-click opens the dropdown, middle-click stops
-  the server, right-click tails its journal.
-- **Images** (`󰋩` + tag of the selected model, or `chrm 37%` while one is generating) —
-  left-click opens the dropdown, right-click generates an image with the selected model.
-  Dim = one-shot, bright = resident `sd-server`.
-- **Agents** (`󰙴` + count; glyph via the `agentsIcon` setting) — dim with no
-  number when nothing is running, lit with a count otherwise. Click opens the dropdown
-  scrolled to the agents section: every running coding agent with its directory and
-  status; selecting one focuses it. Detected: herdr panes (status + pane focus) and any `claude`,
-  `opencode`, `codex`, … process with a TTY inside a Hyprland window — a plain
-  terminal, `omarchy agent`, etc. (window focus). Search matches agent name and
-  every path segment. tmux panes: planned.
+Three groups, one segment each. The `order` setting lists the groups shown, left to
+right (default `agents,model,image`); a group left out has no segment at all, so
+someone who never generates images, or never runs a local model, is not handed an
+icon for it. **Agents** is always shown: it is the anchor, and its menu brings the
+others back. On every segment: **left click** opens that group's dropdown, **middle
+click** opens every shown group side by side, **right click** opens the group's action
+menu (open the panel · enable/disable · shut down, which asks first).
 
-Names, paths and status live in the menu; the bar stays to icons and short tags.
+- **Agents** (`󰙴` + count; glyph via `agentsIcon`) — dim with no number when nothing
+  is running. Every running coding agent with its directory and status; selecting one
+  focuses it. Detected: herdr panes (status + pane focus) and any `claude`, `opencode`,
+  `codex`, … process with a TTY inside a Hyprland window — a plain terminal, `omarchy
+  agent`, etc. (window focus). Its menu is the main menu: *Enable Local models /
+  Image models group* when one is hidden, *Edit models.conf* (opens the plugin's own
+  config in your editor), and *Shut down all agents*, which closes the herdr panes and
+  sends SIGTERM to windowed processes after a confirmation. tmux panes: planned.
+- **Local models** (`󰧑` + abbreviation; glyph via `modelIcon`) — header carries the
+  llama-server switch; the list loads a model. Menu: start/stop the server, view its
+  logs, disable the group, shut down every model server.
+- **Image models** (`󰋩`, plus the model tag while `sd-server` is resident, or
+  `chrm 37%` while one is generating; dim = nothing loaded) — header switch keeps
+  `sd-server` loaded, list picks the model, *Generate image…* prompts. Menu: disable
+  the group, shut down the image server.
+
+Names, paths and status live in the dropdowns; the bar stays to icons and short tags.
 
 ### Image generation
 
@@ -76,8 +87,10 @@ live outside the plugin folder — a `modelctl` launcher on `PATH` and the on-de
 systemd user units — as symlinks back into it, so `omarchy plugin update` updates
 everything. Nothing is enabled at boot: a server starts only when you pick a model.
 
-If the widget is not on the bar: `omarchy plugin enable tjcelaya.modelctl`, then
-`omarchy bar move tjcelaya.modelctl --section center`.
+`omarchy plugin add --enable` puts a new center widget after `omarchy.weather`, so
+the widget lands at the outer end of the stock center group rather than between two
+built-in widgets. If it is not on the bar: `omarchy plugin enable tjcelaya.modelctl`,
+then `omarchy bar move tjcelaya.modelctl --after omarchy.weather`.
 
 ### Uninstall
 
@@ -110,7 +123,9 @@ here is exactly what it does:
 
 - **Executes** `llama-server`, `sd-cli` / `sd-server`, `systemctl --user`,
   `notify-send`, `imv`/`xdg-open` on its own output, `herdr` and `hyprctl` for the
-  agent list. Every action from the widget is an argv passed through the constant
+  agent list, `omarchy bar set` on its own `order` setting when a group is hidden or
+  shown from the menu, `omarchy-launch-editor` on `~/.config/modelctl/models.conf`, and — only after the confirmation dialog — `herdr pane close` /
+  `kill -TERM` on the listed agent processes and `systemctl --user stop` on its units. Every action from the widget is an argv passed through the constant
   `bash -lc 'exec "$@"'`; nothing read from a filename, herdr or Hyprland is ever
   re-parsed by a shell. Checkpoint paths reach `sd-cli` as a NUL-separated argv.
   No `eval`, no privilege escalation, no `sudo`/`pkexec`.
@@ -161,20 +176,24 @@ its manifests and each pulled `name:tag` is served straight from its GGUF blob
 projectors are attached automatically, sharded models start from shard 1, and the
 menu regenerates from the scan every time it opens.
 
-### The dropdown
+### The dropdowns
 
-Clicking any of the three bar segments opens one panel, built from the same kit as
-Omarchy's Bluetooth and Wi-Fi dropdowns: a hero with the loaded model and an on/off
-switch for the LLM server, the `llama.cpp` list (click to load, check on the loaded
-one), the `stable-diffusion` list (click to select for the 󰋩 button; `parks the LLM`
-where the peak would not fit; greyed out with the missing companion file), a
-*Keep image server loaded* toggle, *Generate image…*, and the running agents (click to
-focus). Every list is shown in full; when the whole panel is taller than the screen it
-scrolls as one surface (wheel, drag, `j`/`k` or the arrow keys), so the agents at the
-bottom stay reachable however many models sit above them. `a` jumps to the agents
-section, and the `󰙴` bar badge opens the panel already scrolled there. `Esc` closes,
-`g` generates, `s` toggles the server. `omarchy shell tjcelaya.modelctl toggle` opens it
-from anywhere. The Omarchy quick menu keeps only a launcher entry and the searchable
+Each group is a panel built from the same kit as Omarchy's Bluetooth and Wi-Fi
+dropdowns, anchored under its own segment. **Local models**: header with the loaded
+model and the llama-server switch, then the `llama.cpp` list (click to load, check on
+the loaded one). **Image models**: header with the selected model and the
+keep-`sd-server`-loaded switch, the `stable-diffusion` list (click to select for the 󰋩
+button; `parks the LLM` where the peak would not fit; greyed out with the missing
+companion file), and *Generate image…*. **Agents**: the running agents, click to focus.
+Middle click, or `omarchy shell tjcelaya.modelctl toggle`, opens every enabled group side
+by side in one card. Every list is shown in full; a column taller than the screen scrolls
+on its own (wheel, drag, `j`/`k` or the arrow keys).
+
+Keys: `Esc` closes (or dismisses a confirmation), `h`/`l` cycle model → image → agents →
+all, `m` `i` `a` `*` jump straight to a view, `g` generates, `s` toggles the LLM server.
+In a right-click menu `j`/`k` pick a row and `Enter` runs it; *Shut down…* opens a
+confirmation first. From a script: `omarchy shell tjcelaya.modelctl.groups show image`
+or `menu agents`. The Omarchy quick menu keeps only a launcher entry and the searchable
 **Agents** submenu.
 
 ### Tuning: `~/.config/modelctl/models.conf`
@@ -206,7 +225,8 @@ Exposed through the plugin manifest, editable in Omarchy's settings UI:
 | `port` | 8090 | llama-server port |
 | `showCwd` | true | show each agent's working directory |
 | `imageDir` | `~/Pictures/generated` | where generated images are saved |
-| `modelIcon` | `󰚩` | glyph for the model tag (see `BarWidget.qml` for tested alternatives) |
+| `order` | `agents,model,image` | groups shown, left to right; leave one out to drop its segment (`agents` is always kept) |
+| `modelIcon` | `󰧑` | glyph for the model tag (brain; `󰚩` robot, `󰘚` chip also fit) |
 | `agentsIcon` | `󰙴` | glyph for the agents badge (sparkles; `󰆍` console, `󱚣` robot also fit) |
 
 ## Status

@@ -16,6 +16,6 @@ mkdir -p ~/.config/modelctl
 "$SRC/bin/modelctl-menu-sync" --force || true
 echo "modelctl wired. If the widget is not on the bar yet:"
 echo "  omarchy plugin enable tjcelaya.modelctl"
-echo "  omarchy bar move tjcelaya.modelctl --section center"
+echo "  omarchy bar move tjcelaya.modelctl --after omarchy.weather"
 echo "Models are discovered from ~/.lmstudio/models, ~/.ollama/models, ~/models, ~/.cache/llama.cpp"
 echo "(MODELCTL_MODEL_DIRS). Tune per-model context etc. in ~/.config/modelctl/models.conf."

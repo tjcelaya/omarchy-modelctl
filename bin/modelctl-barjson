@@ -44,12 +44,15 @@ agents = []
 for line in sys.stdin.read().splitlines():
     if not line.strip():
         continue
-    p = (line.split("\t") + [""] * 7)[:7]
-    try:
-        focus = json.loads(p[6]) if p[6] else []
-    except ValueError:
-        focus = []
-    agents.append({"name": p[0], "cwd": p[1], "status": p[2], "focused": p[3] == "1", "pane": p[4], "focus": focus})
+    p = (line.split("\t") + [""] * 8)[:8]
+    def argv(s):
+        try:
+            v = json.loads(s) if s else []
+        except ValueError:
+            v = []
+        return v if isinstance(v, list) else []
+    agents.append({"name": p[0], "cwd": p[1], "status": p[2], "focused": p[3] == "1", "pane": p[4],
+                   "focus": argv(p[6]), "stop": argv(p[7])})
 llms = []
 for line in E("MC_LLMS", "").splitlines():
     p = (line.split("\t") + [""] * 7)[:7]

@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Shut down one group: the bar's right-click menu calls this after its confirmation.
+#   llm     stop every llama-server unit
+#   image   stop the resident sd-server and cancel a running generation
+#   agents  end every running coding agent (herdr panes are closed, windowed
+#           processes get SIGTERM) using the stop argv modelctl-agents reports
+#   all     llm + image
+set -u
+D="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+ST="$HOME/.local/state/modelctl"
+notify() { notify-send -a modelctl "$@"; }
+
+stop_image() {
+  local pid n=0
+  if systemctl --user is-active --quiet modelctl@image.service; then
+    systemctl --user stop modelctl@image.service; n=1
+  fi
+  # image.busy: model<TAB>start<TAB>log<TAB>prompt<TAB>pid — written by the running generation
+  if [ -f "$ST/image.busy" ]; then
+    pid=$(cut -f5 "$ST/image.busy")
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then kill -TERM "$pid" 2>/dev/null && n=1; fi
+  fi
+  [ "$n" -eq 1 ] && notify -i image "Image server" "Shut down — generation cancelled if one was running" \
+                 || notify -i image "Image server" "Nothing was running"
+}
+
+stop_agents() {
+  local n=0 line stop
+  while IFS= read -r line; do
+    stop=$(printf '%s' "$line" | cut -f8)
+    [ -n "$stop" ] || continue
+    printf '%s' "$stop" | python3 -c '
+import json, subprocess, sys
+argv = json.load(sys.stdin)
+if isinstance(argv, list) and argv and all(isinstance(a, str) for a in argv):
+    subprocess.run(argv, timeout=10)
+' && n=$((n + 1))
+  done < <("$D/modelctl-agents" 2>/dev/null)
+  notify -i utilities-terminal "Agents" "$n agent session(s) shut down"
+}
+
+case "${1:-}" in
+  llm)    exec "$D/modelctl-stop" ;;
+  image)  stop_image ;;
+  agents) stop_agents ;;
+  all)    "$D/modelctl-stop"; stop_image ;;
+  *) echo "usage: modelctl-shutdown llm|image|agents|all" >&2; exit 1 ;;
+esac

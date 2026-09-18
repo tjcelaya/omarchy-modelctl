@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Every running interactive coding agent, as TSV:
-   agent  cwd  status  focused  id  focus-command  focus-argv(JSON)
+   agent  cwd  status  focused  id  focus-command  focus-argv(JSON)  stop-argv(JSON)
 focus-command is a shell string for the Omarchy menu (which only runs strings);
 focus-argv is the same action as an argv array for the bar widget, so nothing
-read from herdr or Hyprland is ever re-parsed by a shell.
+read from herdr or Hyprland is ever re-parsed by a shell. stop-argv ends the
+session: the herdr pane is closed, a windowed process gets SIGTERM.
 
 Sources, deduplicated:
   herdr   `herdr agent list` — status and pane, focused via `herdr agent focus`
@@ -41,7 +42,8 @@ try:
         rows.append([a.get("agent", "?"), short(a.get("cwd") or ""), a.get("agent_status", ""),
                      "1" if a.get("focused") else "0", pane,
                      f"herdr agent focus {shlex.quote(pane)}",
-                     json.dumps(["herdr", "agent", "focus", pane])])
+                     json.dumps(["herdr", "agent", "focus", pane]),
+                     json.dumps(["herdr", "pane", "close", pane])])
 except Exception:
     pass
 
@@ -87,7 +89,8 @@ for pid, (ppid, tty, comm, args) in procs.items():
     rows.append([comm, cwd, "running", "1" if win["pid"] == active else "0", f"pid:{pid}",
                  f"hyprctl dispatch 'hl.dsp.focus({{ window = \"pid:{wpid}\" }})' >/dev/null 2>&1"
                  f" || hyprctl dispatch focuswindow pid:{wpid}",
-                 json.dumps(["bash", "-c", lua, "bash", str(wpid)])])
+                 json.dumps(["bash", "-c", lua, "bash", str(wpid)]),
+                 json.dumps(["kill", "-TERM", str(pid)])])
 
 for r in rows:
     print("\t".join(r))
