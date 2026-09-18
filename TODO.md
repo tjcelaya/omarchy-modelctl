@@ -1,9 +1,17 @@
 # TODO
 
-## Published at https://github.com/tjcelaya/omarchy-modelctl (2026-08-27)
+Repo: https://github.com/tjcelaya/omarchy-modelctl. Marketplace submission steps are
+in PUBLISHING.md; known gaps are the manual's Bugs section (`man modelctl`).
 
-Remaining manual steps are in PUBLISHING.md (tag, marketplace submission). Mirror
-the issue below as a **Linear ticket and/or GitHub issue** on Omarchy.
+## Planned
+
+- Count on the Local models segment when more than one model fits in VRAM; needs a
+  port per running model (each `modelctl@<id>` unit binds `port` today).
+- Generate dialog inputs for steps, size and output folder, opening with the
+  `models.conf` values.
+- tmux pane detection for agents.
+
+## Upstream: mirror as a GitHub issue on Omarchy
 
 ---
 

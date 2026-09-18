@@ -70,6 +70,6 @@ Details: [Image models](docs/MANUAL.md#image-models) ·
 
 ## Status
 
-v0.1.1, works on one machine. Known gaps and the development loop are in the manual's
+v0.2.0, works on one machine. Known gaps and the development loop are in the manual's
 [Bugs](docs/MANUAL.md#bugs) and [Developing](docs/MANUAL.md#developing) sections;
 `TUNING.md` explains how the example config values were measured.
