@@ -35,19 +35,7 @@ def run(cmd):
 
 rows = []
 
-# ── herdr ──
-try:
-    for a in json.loads(run(["herdr", "agent", "list"])).get("result", {}).get("agents", []) or []:
-        pane = str(a.get("pane_id", ""))
-        rows.append([a.get("agent", "?"), short(a.get("cwd") or ""), a.get("agent_status", ""),
-                     "1" if a.get("focused") else "0", pane,
-                     f"herdr agent focus {shlex.quote(pane)}",
-                     json.dumps(["herdr", "agent", "focus", pane]),
-                     json.dumps(["herdr", "pane", "close", pane])])
-except Exception:
-    pass
-
-# ── windowed processes ──
+# ── processes and windows ──
 procs = {}
 for line in run(["ps", "-eo", "pid=,ppid=,tty=,comm=,args="]).splitlines():
     parts = line.split(None, 4)
@@ -61,6 +49,52 @@ try:
     active = json.loads(run(["hyprctl", "activewindow", "-j"]) or "{}").get("pid", -1)
 except Exception:
     windows, active = {}, -1
+
+
+def window_for(pid):
+    """The Hyprland client that (transitively) owns pid, or None."""
+    p = pid
+    for _ in range(12):
+        if p <= 1 or p not in procs:
+            return None
+        if p in windows:
+            return windows[p]
+        p = procs[p][0]
+    return None
+
+
+# Hyprland >= 0.56 takes Lua; older builds take the classic dispatcher. The argv form
+# passes the pid as a positional parameter so bash never re-tokenizes it.
+FOCUS_LUA = 'hyprctl dispatch "hl.dsp.focus({ window = \\"pid:$1\\" })" >/dev/null 2>&1 || hyprctl dispatch focuswindow "pid:$1"'
+
+
+def focus_cmd(wpid):
+    return (f"hyprctl dispatch 'hl.dsp.focus({{ window = \"pid:{wpid}\" }})' >/dev/null 2>&1"
+            f" || hyprctl dispatch focuswindow pid:{wpid}")
+
+
+# ── herdr ──
+# `herdr agent focus` switches the pane inside herdr but does not raise the terminal
+# the herdr client runs in, so from another workspace nothing visible happens. Find
+# the client's window (a `herdr` process with a TTY under a Hyprland client) and
+# focus that first; the pane switch follows.
+herdr_win = next((w for pid, (ppid, tty, comm, args) in procs.items()
+                  if comm == "herdr" and tty != "?" and "server" not in args and (w := window_for(pid))), None)
+try:
+    for a in json.loads(run(["herdr", "agent", "list"])).get("result", {}).get("agents", []) or []:
+        pane = str(a.get("pane_id", ""))
+        if herdr_win:
+            wpid = int(herdr_win["pid"])
+            cmd = focus_cmd(wpid) + f"; herdr agent focus {shlex.quote(pane)}"
+            argv = ["bash", "-c", FOCUS_LUA + '; herdr agent focus "$2"', "bash", str(wpid), pane]
+        else:
+            cmd = f"herdr agent focus {shlex.quote(pane)}"
+            argv = ["herdr", "agent", "focus", pane]
+        rows.append([a.get("agent", "?"), short(a.get("cwd") or ""), a.get("agent_status", ""),
+                     "1" if a.get("focused") else "0", pane, cmd, json.dumps(argv),
+                     json.dumps(["herdr", "pane", "close", pane])])
+except Exception:
+    pass
 
 for pid, (ppid, tty, comm, args) in procs.items():
     if comm not in AGENTS or tty == "?":
@@ -83,13 +117,9 @@ for pid, (ppid, tty, comm, args) in procs.items():
     except OSError:
         cwd = ""
     wpid = int(win["pid"])   # integer by construction; the only thing interpolated
-    # Hyprland >= 0.56 takes Lua; older builds take the classic dispatcher. The argv
-    # form passes the pid as a positional parameter so bash never re-tokenizes it.
-    lua = 'hyprctl dispatch "hl.dsp.focus({ window = \\"pid:$1\\" })" >/dev/null 2>&1 || hyprctl dispatch focuswindow "pid:$1"'
     rows.append([comm, cwd, "running", "1" if win["pid"] == active else "0", f"pid:{pid}",
-                 f"hyprctl dispatch 'hl.dsp.focus({{ window = \"pid:{wpid}\" }})' >/dev/null 2>&1"
-                 f" || hyprctl dispatch focuswindow pid:{wpid}",
-                 json.dumps(["bash", "-c", lua, "bash", str(wpid)]),
+                 focus_cmd(wpid),
+                 json.dumps(["bash", "-c", FOCUS_LUA, "bash", str(wpid)]),
                  json.dumps(["kill", "-TERM", str(pid)])])
 
 for r in rows:
