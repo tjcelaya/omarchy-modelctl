@@ -159,9 +159,17 @@ Panel {
     root.close()
     root.run([root.scriptDir() + "/modelctl-image"])
   }
+  // An argv read from the poll arrives in a delegate's modelData as a Qt sequence,
+  // not a JS Array (Array.isArray is false), so copy it element by element.
+  function toArgv(v) {
+    var out = []
+    if (v && v.length) for (var i = 0; i < v.length; i++) out.push(String(v[i]))
+    return out
+  }
   function focusAgent(a) {
     root.close()
-    if (a && Array.isArray(a.focus) && a.focus.length) root.run(a.focus)
+    var argv = root.toArgv(a ? a.focus : null)
+    if (argv.length) root.run(argv)
   }
   function showLogs() {
     root.close()
