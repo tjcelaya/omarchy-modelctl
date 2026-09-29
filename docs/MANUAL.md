@@ -44,7 +44,9 @@ Middle click, or the IPC `toggle`, shows every shown group in one card with a co
 
 ### Agents
 
-The running coding agents with their working directory and status. Click one to focus it: a herdr pane is focused through herdr, and any `claude`, `opencode`, `codex`, `gemini`, `aider`, ... process with a TTY inside a Hyprland window (a plain terminal, `omarchy agent`) is focused by window. Processes under herdr are listed once, by herdr. tmux panes are not walked yet.
+The running coding agents with their working directory and status. Click one to focus it. Any `claude`, `opencode`, `codex`, `gemini`, `aider`, ... process with a TTY inside a Hyprland window (a plain terminal, `omarchy agent`) is focused by window. Processes under herdr are listed once, by herdr. tmux panes are not walked yet.
+
+herdr agents are listed from every running herdr session, and a row shows its session when more than one is running. Clicking one raises a terminal attached to that session, then switches herdr to the agent's workspace and tab. herdr's focus is shared by every client of a session, so any attached terminal will show the agent; when several are open, the one already on screen wins, then the one used most recently. Clients started with `--no-session` or `--remote` have no local session to query and are not listed.
 
 The Agents menu is the main menu:
 
