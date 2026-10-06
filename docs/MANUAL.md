@@ -44,7 +44,7 @@ Middle click, or the IPC `toggle`, shows every shown group in one card with a co
 
 ### Agents
 
-The running coding agents with their working directory and status. Click one to focus it. Any `claude`, `opencode`, `codex`, `gemini`, `aider`, ... process with a TTY inside a Hyprland window (a plain terminal, `omarchy agent`) is focused by window. Processes under herdr are listed once, by herdr. tmux panes are not walked yet.
+The running coding agents with their working directory and status. Click one to focus it. Any `claude`, `opencode`, `codex`, `gemini`, `aider`, ... process with a TTY inside a Hyprland window (a plain terminal, `omarchy agent`) is focused by window. Processes under herdr are listed once, by herdr. Agents inside tmux panes are found through the client attached to the pane's session; focusing raises that terminal and switches tmux to the pane, and herdr running inside tmux is reached the same way.
 
 herdr agents are listed from every running herdr session, and a row shows its session when more than one is running. Clicking one raises a terminal attached to that session, then switches herdr to the agent's workspace and tab. herdr's focus is shared by every client of a session, so any attached terminal will show the agent; when several are open, the one already on screen wins, then the one used most recently. Clients started with `--no-session` or `--remote` have no local session to query and are not listed.
 
@@ -241,7 +241,6 @@ Work in a clone, push, then pull it into the installed copy the same way any use
 
 - Context sizes come from `models.conf` (16k default), not computed from free VRAM.
 - Only one `llama-server` runs at a time; every LLM unit binds `port`.
-- tmux panes are not walked for agents.
 - The searchable Agents submenu in Omarchy's quick menu is a generated JSONC file, because the menu's provider mechanism is a closed set; its 300px card truncates long working directories (the full path is in the row's description, visible while searching).
 
 ## SEE ALSO

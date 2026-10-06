@@ -15,7 +15,11 @@ Sources, deduplicated:
           `omarchy agent`, etc. — focused via a Hyprland dispatch on the window.
           Processes under herdr are skipped here (herdr already reports them);
           headless helpers (daemons, background sessions) have no window and are
-          ignored. tmux panes are not walked yet.
+          ignored.
+  tmux    agent processes under a tmux pane, focused by raising the window of a
+          client attached to the pane's session (preferring one on screen) and
+          switching that client to the pane. Panes with no attached client are
+          headless and ignored.
 Empty output, exit 0, when nothing is running."""
 import json, os, re, shlex, subprocess, sys
 
@@ -64,14 +68,52 @@ def rank(w):
     return (0 if w.get("workspace", {}).get("id") in visible_ws else 1, w.get("focusHistoryID", 1 << 30))
 
 
-def owner_windows(pid):
-    """Every Hyprland window of the nearest ancestor of pid that owns any."""
+# ── tmux ──
+# A tmux server owns no window, so agents inside it are reached through the clients
+# attached to the pane's session. `switch-client -t <pane>` also selects the pane's
+# window and pane; the explicit selects cover older servers.
+tmux_pane_pids = set()
+tmux_panes = []
+for line in run(["tmux", "list-panes", "-a", "-F", "#{session_name}\t#{pane_id}\t#{pane_pid}"]).splitlines():
+    parts = line.split("\t")
+    if len(parts) == 3 and parts[2].isdigit():
+        tmux_panes.append((parts[0], parts[1], int(parts[2])))
+        tmux_pane_pids.add(int(parts[2]))
+tmux_clients = {}
+
+
+def direct_owner_windows(pid):
     p = pid
     for _ in range(12):
         if p <= 1 or p not in procs:
             return []
         if p in windows:
             return windows[p]
+        p = procs[p][0]
+    return []
+
+
+for line in run(["tmux", "list-clients", "-F", "#{session_name}\t#{client_tty}\t#{client_pid}"]).splitlines():
+    parts = line.split("\t")
+    if len(parts) == 3 and parts[2].isdigit():
+        for w in direct_owner_windows(int(parts[2])):
+            tmux_clients.setdefault(parts[0], []).append((parts[1], w))
+
+
+
+def owner_windows(pid):
+    """Every Hyprland window of the nearest ancestor of pid that owns any. A process inside
+    a tmux pane hangs off the tmux server, so the walk continues through the clients attached
+    to that pane's session."""
+    p = pid
+    for _ in range(12):
+        if p <= 1 or p not in procs:
+            return []
+        if p in windows:
+            return windows[p]
+        if p in tmux_pane_pids:
+            session = next((s for s, _, pane_pid in tmux_panes if pane_pid == p), None)
+            return [w for _, w in tmux_clients.get(session, [])]
         p = procs[p][0]
     return []
 
@@ -158,10 +200,53 @@ for name in sessions:
                      "1" if a.get("focused") else "0", label, cmd, json.dumps(argv),
                      json.dumps(["herdr", "--session", name, "pane", "close", pane])])
 
+def helper_process(args):
+    return any(t in args for t in ("bg-pty-host", "daemon run", "bg-spare", "--bg-", "mcp serve"))
+
+
+def tmux_pane_of(pid):
+    """(session, pane_id) of the tmux pane pid runs in, else None."""
+    p = pid
+    for _ in range(12):
+        if p <= 1 or p not in procs:
+            return None
+        if p in tmux_pane_pids:
+            for session, pane_id, pane_pid in tmux_panes:
+                if pane_pid == p:
+                    return session, pane_id
+        p = procs[p][0]
+    return None
+
+
+TMUX_FOCUS = FOCUS_LUA + '; tmux switch-client -c "$2" -t "$3" 2>/dev/null; tmux select-window -t "$3" 2>/dev/null; tmux select-pane -t "$3" 2>/dev/null'
+tmux_agent_pids = set()
 for pid, (ppid, tty, comm, args) in procs.items():
-    if comm not in AGENTS or tty == "?":
+    if comm not in AGENTS or tty == "?" or helper_process(args):
         continue
-    if any(t in args for t in ("bg-pty-host", "daemon run", "bg-spare", "--bg-", "mcp serve")):
+    pane = tmux_pane_of(pid)
+    if pane is None:
+        continue
+    tmux_agent_pids.add(pid)
+    session, pane_id = pane
+    clients = tmux_clients.get(session) or [c for cs in tmux_clients.values() for c in cs]
+    if not clients:
+        continue
+    client_tty, win = min(clients, key=lambda c: rank(c[1]))
+    try:
+        cwd = short(os.readlink(f"/proc/{pid}/cwd"))
+    except OSError:
+        cwd = ""
+    addr = win["address"]
+    label = f"tmux:{session}:{pane_id}"
+    rows.append([comm, cwd, "running", "1" if win.get("focusHistoryID") == 0 else "0", label,
+                 focus_cmd(addr) + f"; tmux switch-client -c {shlex.quote(client_tty)} -t {shlex.quote(pane_id)}; tmux select-window -t {shlex.quote(pane_id)}; tmux select-pane -t {shlex.quote(pane_id)}",
+                 json.dumps(["bash", "-c", TMUX_FOCUS, "bash", addr, client_tty, pane_id]),
+                 json.dumps(["kill", "-TERM", str(pid)])])
+
+for pid, (ppid, tty, comm, args) in procs.items():
+    if comm not in AGENTS or tty == "?" or pid in tmux_agent_pids:
+        continue
+    if helper_process(args):
         continue
     wins = []; under_herdr = False; p = ppid
     for _ in range(12):

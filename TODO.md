@@ -9,7 +9,6 @@ in PUBLISHING.md; known gaps are the manual's Bugs section (`man modelctl`).
   port per running model (each `modelctl@<id>` unit binds `port` today).
 - Generate dialog inputs for steps, size and output folder, opening with the
   `models.conf` values.
-- tmux pane detection for agents.
 
 ## Upstream: mirror as a GitHub issue on Omarchy
 
